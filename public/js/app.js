@@ -460,8 +460,8 @@ function calculateDueAlert(dueDateStr, isPaid) {
     };
   }
 
-  // 2. NARANJA: Vence en una semana (2 a 7 días)
-  if (diffDays > 1 && diffDays <= 7) {
+  // 2. NARANJA: Próximos a vencer (2 a 14 días)
+  if (diffDays > 1 && diffDays <= 14) {
     return {
       cssClass: 'row-status-orange',
       postitClass: 'status-orange',
@@ -472,31 +472,40 @@ function calculateDueAlert(dueDateStr, isPaid) {
     };
   }
 
-  // 3. BLANCO / NEUTRO: Faltan 15 días o más
-  if (diffDays >= 15) {
-    return {
-      cssClass: 'row-status-white',
-      postitClass: 'status-white',
-      badgeClass: 'status-pill-white',
-      label: `Faltan ${diffDays} días`,
-      diffDays: diffDays,
-      urgency: 'white'
-    };
-  }
-
-  // 4. Intermedio: 8 a 14 días
+  // 3. BLANCO / NEUTRO: Faltan 15 días o más (con tiempo suficiente)
   return {
-    cssClass: 'row-status-neutral',
+    cssClass: 'row-status-white',
     postitClass: 'status-white',
-    badgeClass: 'status-pill-neutral',
-    label: `En ${diffDays} días`,
+    badgeClass: 'status-pill-white',
+    label: `Faltan ${diffDays} días`,
     diffDays: diffDays,
-    urgency: 'neutral'
+    urgency: 'white'
   };
 }
 
 // ==========================================================================
-// FILTERING & RENDERING (ORDEN: EL MÁS PRONTO A VENCERSE PRIMERO)
+// JERARQUÍA DE ORDENAMIENTO ESTRICTA:
+// 1. Los vencidos (máxima urgencia)
+// 2. Los a punto de vencer (Hoy o Mañana)
+// 3. Los próximos (2 a 14 días)
+// 4. Los que todavía tienen tiempo (15+ días)
+// 5. Administradas por el gerente (quedan abajo)
+// 6. Las que ya se quedaron pagadas (quedan hasta el fondo absoluto)
+// ==========================================================================
+function getDebtSortPriority(d) {
+  if (d.status === 'Pagado') return 6;
+  if (d.managerAssumed) return 5;
+
+  const alert = calculateDueAlert(d.dueDate, false);
+  const diffDays = alert.diffDays;
+  if (diffDays < 0) return 1; // Vencidos
+  if (diffDays <= 1) return 2; // Vence hoy o mañana
+  if (diffDays <= 14) return 3; // Próximos
+  return 4; // Con tiempo suficiente (15+ días)
+}
+
+// ==========================================================================
+// FILTERING & RENDERING (ORDEN ESTRATÉGICO: ACTIVOS PRIMERO, PAGADOS/GERENCIA AL FONDO)
 // ==========================================================================
 function onFilterChange() {
   applyFiltersAndRender();
@@ -506,8 +515,20 @@ function applyFiltersAndRender() {
   const search = (document.getElementById('searchInput')?.value || '').toLowerCase().trim();
   const filter = document.getElementById('statusFilter')?.value || 'all';
 
-  // STRICT ORDERING: Earliest due date first (el más pronto a vencerse primero)
-  const sorted = [...state.debts].sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+  // STRICT ORDERING:
+  // 1. Vencidos -> 2. A punto de vencer -> 3. Próximos -> 4. Con tiempo -> 5. Administradas por gerente -> 6. Pagadas
+  // Dentro de cada nivel, el más próximo a vencer primero.
+  const sorted = [...state.debts].sort((a, b) => {
+    const pA = getDebtSortPriority(a);
+    const pB = getDebtSortPriority(b);
+    if (pA !== pB) return pA - pB;
+
+    const timeA = new Date(a.dueDate).getTime();
+    const timeB = new Date(b.dueDate).getTime();
+    if (timeA !== timeB) return timeA - timeB;
+
+    return a.id.localeCompare(b.id);
+  });
 
   state.filteredDebts = sorted.filter(d => {
     const text = `${d.provider} ${d.concept} ${d.category} ${d.id}`.toLowerCase();
@@ -875,7 +896,7 @@ function updateSummaryKPIs() {
   if (kpiTotalPending) kpiTotalPending.textContent = `S/ ${formatMoney(totalPending)}`;
   if (kpiPendingCount) kpiPendingCount.textContent = `${state.debts.length - paidCount} pendientes`;
   if (kpiUrgentCount) kpiUrgentCount.textContent = urgentCount;
-  if (kpiSoonCount) kpiSoonCount.textContent = `+${soonCount} esta semana`;
+  if (kpiSoonCount) kpiSoonCount.textContent = `+${soonCount} próximos`;
   if (kpiCashTotal) kpiCashTotal.textContent = `S/ ${formatMoney(totalCash)}`;
   if (kpiCashCount) kpiCashCount.textContent = `${cashCount} arqueo${cashCount !== 1 ? 's' : ''}`;
   if (kpiBankTotal) kpiBankTotal.textContent = `Banco: S/ ${formatMoney(totalBank)}`;
