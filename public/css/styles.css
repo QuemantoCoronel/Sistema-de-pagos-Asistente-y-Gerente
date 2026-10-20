@@ -388,6 +388,26 @@ body {
   color: var(--accent-primary);
 }
 
+.system-date-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--border-medium);
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-heading);
+  box-shadow: var(--shadow-sm);
+  white-space: nowrap;
+}
+
+.system-date-pill svg {
+  color: var(--accent-primary);
+  flex-shrink: 0;
+}
+
 .btn-logout {
   background: var(--bg-card-subtle);
   border: 1px solid var(--border-medium);
@@ -849,6 +869,25 @@ body {
 }
 .postit-card.status-red .postit-tape {
   background: rgba(239, 68, 68, 0.35);
+}
+
+/* 1B. POST-IT VENCIDO (MÁXIMA URGENCIA - VENCIMIENTO SUPERADO) */
+.postit-card.status-expired {
+  border-color: #ef4444;
+  border-top: 6px solid #b91c1c;
+  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.25);
+}
+.postit-card.status-expired .postit-urgency-tag {
+  background: rgba(239, 68, 68, 0.28);
+  color: #b91c1c;
+  border: 1.5px solid #ef4444;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+[data-theme="dark"] .postit-card.status-expired .postit-urgency-tag {
+  background: rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+  border-color: #f87171;
 }
 
 /* 2. POST-IT NARANJA: Vence en una semana */

@@ -3,11 +3,33 @@
  * Lógica de frontend con Autenticación (Gerente / Asistente) y Vista Post-it
  */
 
+// System Date Computation (Dynamic real-time detection)
+function getSystemToday() {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+}
+
+function getTodayFormattedFull() {
+  const now = new Date();
+  const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+  const str = now.toLocaleDateString('es-PE', options);
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+function updateLiveDateDisplay() {
+  const el = document.getElementById('liveDateText');
+  if (el) {
+    el.textContent = `Hoy: ${getTodayFormattedFull()}`;
+  }
+}
+
 // Global State
 const state = {
   currentUser: null, // { role: 'gerente' | 'asistente', name, title, email }
   currentMonth: '2026-10', // Standardized baseline
-  todayDate: new Date('2026-10-19T00:00:00'),
+  get todayDate() {
+    return getSystemToday();
+  },
   viewMode: 'postits', // 'postits' (default) or 'table'
   debts: [],
   filteredDebts: [],
@@ -26,8 +48,42 @@ document.addEventListener('DOMContentLoaded', () => {
   initTheme();
   checkSession();
   setupEventListeners();
+  updateLiveDateDisplay();
   updateDateHelperTexts();
+  initAutoDayTracker();
 });
+
+let lastObservedDay = '';
+
+function initAutoDayTracker() {
+  lastObservedDay = getTodayStr();
+
+  // Check day change periodically (every 15 seconds)
+  setInterval(() => {
+    const currentDay = getTodayStr();
+    if (currentDay !== lastObservedDay) {
+      lastObservedDay = currentDay;
+      updateLiveDateDisplay();
+      updateDateHelperTexts();
+      applyFiltersAndRender();
+      updateSummaryKPIs();
+    }
+  }, 15000);
+
+  // Check on window focus or visibility change
+  window.addEventListener('focus', () => {
+    updateLiveDateDisplay();
+    updateDateHelperTexts();
+    applyFiltersAndRender();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      updateLiveDateDisplay();
+      updateDateHelperTexts();
+      applyFiltersAndRender();
+    }
+  });
+}
 
 // ==========================================================================
 // THEME SETUP & CONTRAST FIX
@@ -122,6 +178,8 @@ function showApp() {
     `;
   }
 
+  updateLiveDateDisplay();
+  updateDateHelperTexts();
   loadData();
 }
 
@@ -517,7 +575,10 @@ function calculateDueAlert(dueDateStr, isPaid) {
 
   const [y, m, d] = dueDateStr.split('-').map(Number);
   const due = new Date(y, m - 1, d);
+  due.setHours(0, 0, 0, 0);
+
   const today = state.todayDate;
+  today.setHours(0, 0, 0, 0);
 
   const diffTime = due.getTime() - today.getTime();
   const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
@@ -525,16 +586,23 @@ function calculateDueAlert(dueDateStr, isPaid) {
   // 1. ROJO: Vence al día siguiente o ya se encuentra vencido
   if (diffDays <= 1) {
     let text = 'Vence mañana';
-    if (diffDays === 0) text = '¡Vence HOY!';
-    if (diffDays < 0) text = `Vencido (${Math.abs(diffDays)}d)`;
+    let isExpired = false;
+    if (diffDays === 0) {
+      text = '¡Vence HOY!';
+    } else if (diffDays < 0) {
+      isExpired = true;
+      const daysOverdue = Math.abs(diffDays);
+      text = daysOverdue === 1 ? '¡VENCIDO (Ayer)!' : `¡VENCIDO (${daysOverdue}d)!`;
+    }
 
     return {
-      cssClass: 'row-status-red',
-      postitClass: 'status-red',
-      badgeClass: 'status-pill-red',
+      cssClass: isExpired ? 'row-status-red row-status-expired' : 'row-status-red',
+      postitClass: isExpired ? 'status-red status-expired' : 'status-red',
+      badgeClass: isExpired ? 'status-pill-red status-pill-expired' : 'status-pill-red',
       label: text,
       diffDays: diffDays,
-      urgency: 'red'
+      urgency: 'red',
+      isExpired: isExpired
     };
   }
 
@@ -612,6 +680,10 @@ function applyFiltersAndRender() {
     const text = `${d.provider} ${d.concept} ${d.category} ${d.id}`.toLowerCase();
     if (search && !text.includes(search)) return false;
 
+    if (filter === 'expired') {
+      const alert = calculateDueAlert(d.dueDate, d.status === 'Pagado');
+      if (!alert.isExpired || d.status === 'Pagado') return false;
+    }
     if (filter === 'pending' && d.status !== 'Pendiente') return false;
     if (filter === 'paid' && d.status !== 'Pagado') return false;
     if (filter === 'manager' && !d.managerAssumed) return false;
@@ -773,6 +845,7 @@ function renderPostits() {
 
           <div class="postit-tags-row">
             <span class="category-tag">${escapeHtml(d.category || 'General')}</span>
+            ${alert.isExpired ? '<span class="category-tag" style="background: rgba(239, 68, 68, 0.22); color: #ef4444; border-color: #ef4444; font-weight: 800;">⚠️ ESTADO: VENCIDO</span>' : ''}
             ${d.isRecurring ? `<span class="category-tag" style="color: #0891b2; border-color: rgba(6, 182, 212, 0.4);">&#8635; Recurrente (${escapeHtml(d.recurringCategory || 'Fijo')})</span>` : ''}
             ${cashInfoHtml}
           </div>
@@ -784,9 +857,9 @@ function renderPostits() {
             <span class="postit-amount-value">${d.currency || 'S/'} ${formatMoney(d.amount)}</span>
           </div>
 
-          <div class="postit-date-row">
-            <span>Fecha de Vencimiento:</span>
-            <span class="postit-date-val">
+          <div class="postit-date-row" style="${alert.isExpired ? 'color: #ef4444; font-weight: 700;' : ''}">
+            <span>${alert.isExpired ? 'Venció el:' : 'Fecha de Vencimiento:'}</span>
+            <span class="postit-date-val" style="${alert.isExpired ? 'color: #ef4444; font-weight: 800;' : ''}">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
               ${formatDate(d.dueDate)}
             </span>
@@ -843,6 +916,8 @@ function renderDebtsTable() {
           `}
         </div>
       `;
+    } else if (alert.isExpired) {
+      paymentColHtml = `<span style="font-size: 0.74rem; font-weight: 800; color: #ef4444; background: rgba(239, 68, 68, 0.12); padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(239, 68, 68, 0.35);">⚠️ Vencido</span>`;
     } else {
       paymentColHtml = `<span style="font-size: 0.74rem; color: var(--text-dim);">Pendiente</span>`;
     }
@@ -928,6 +1003,7 @@ function updateSummaryKPIs() {
   let totalCash = 0;
   let totalBank = 0;
   let urgentCount = 0;
+  let expiredCount = 0;
   let soonCount = 0;
   let paidCount = 0;
   let cashCount = 0;
@@ -948,6 +1024,9 @@ function updateSummaryKPIs() {
       const alert = calculateDueAlert(d.dueDate, false);
       if (alert.urgency === 'red') {
         urgentCount++;
+        if (alert.isExpired) {
+          expiredCount++;
+        }
       } else if (alert.urgency === 'orange') {
         soonCount++;
       }
@@ -974,6 +1053,12 @@ function updateSummaryKPIs() {
   if (kpiTotalPending) kpiTotalPending.textContent = `S/ ${formatMoney(totalPending)}`;
   if (kpiPendingCount) kpiPendingCount.textContent = `${state.debts.length - paidCount} pendientes`;
   if (kpiUrgentCount) kpiUrgentCount.textContent = urgentCount;
+
+  const kpiUrgentBadge = document.querySelector('.summary-card.urgent .badge-pill');
+  if (kpiUrgentBadge) {
+    kpiUrgentBadge.textContent = expiredCount > 0 ? `${expiredCount} ya vencido${expiredCount !== 1 ? 's' : ''}` : 'Vence hoy o mañana';
+  }
+
   if (kpiSoonCount) kpiSoonCount.textContent = `+${soonCount} próximos`;
   if (kpiCashTotal) kpiCashTotal.textContent = `S/ ${formatMoney(totalCash)}`;
   if (kpiCashCount) kpiCashCount.textContent = `${cashCount} arqueo${cashCount !== 1 ? 's' : ''}`;

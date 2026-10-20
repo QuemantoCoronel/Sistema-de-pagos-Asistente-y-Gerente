@@ -179,7 +179,8 @@ const server = http.createServer(async (req, res) => {
         let soonCount = 0;   // Naranja
         let managerAssumedCount = 0;
 
-        const today = new Date('2026-10-19T00:00:00'); // Standardized reference date
+        const { limaDate } = getSystemDateStrings();
+        const today = new Date(limaDate + 'T00:00:00');
         today.setHours(0, 0, 0, 0);
 
         monthDebts.forEach(d => {
