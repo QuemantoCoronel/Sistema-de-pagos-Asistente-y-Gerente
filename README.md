@@ -133,3 +133,5 @@ Sistema de pagos Asistente y Gerente/
     └── assets/
         └── logo.jpg                    # Logotipo corporativo de PayControl
 ```
+#   S i s t e m a - d e - p a g o s - A s i s t e n t e - y - G e r e n t e  
+ 
