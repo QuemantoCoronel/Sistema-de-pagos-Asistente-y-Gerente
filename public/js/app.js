@@ -26,6 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initTheme();
   checkSession();
   setupEventListeners();
+  updateDateHelperTexts();
 });
 
 // ==========================================================================
@@ -368,13 +369,43 @@ function updateMonthDisplay() {
 }
 
 // ==========================================================================
-// DATE & INPUT CONSTRAINTS (PROHIBIDO CREAR PAGOS O FECHAS ANTERIORES A HOY 19/10/2026)
+// DYNAMIC DATE & INPUT CONSTRAINTS (CALCULADO AUTOMÁTICAMENTE AL DÍA ACTUAL)
 // ==========================================================================
-const TODAY_DATE_STR = '2026-10-19';
-const MIN_CREATION_DATE = '2026-10-19'; // No se permite crear nada anterior a hoy
-const MAX_CREATION_DATE = '2027-12-31'; // Hasta fin de 2027
-const MIN_PAY_DATE = '2026-10-19T00:00';
-const MAX_PAY_DATE = '2026-10-19T23:59'; // Pagos solo en fecha de hoy
+const MAX_CREATION_DATE = '2027-12-31';
+
+function getTodayStr() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function getTodayFormattedDMY() {
+  const d = new Date();
+  const day = String(d.getDate()).padStart(2, '0');
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const y = d.getFullYear();
+  return `${day}/${m}/${y}`;
+}
+
+function getNowIsoLocal() {
+  const now = new Date();
+  const localIso = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  return localIso;
+}
+
+function updateDateHelperTexts() {
+  const todayFormatted = getTodayFormattedDMY();
+  const payHelper = document.getElementById('payDateHelperText');
+  if (payHelper) {
+    payHelper.textContent = `Solo fecha de hoy (${todayFormatted}). No se permiten pagos en fechas pasadas ni futuras.`;
+  }
+  const dueHelper = document.getElementById('dueDateHelperText');
+  if (dueHelper) {
+    dueHelper.textContent = `Solo desde hoy (${todayFormatted}) hasta 31/12/2027 (no se admiten fechas pasadas).`;
+  }
+}
 
 function validateAmountInput(input) {
   if (!input || input.value === '') return;
@@ -412,25 +443,30 @@ function enforceDateBounds(input, isDateTime = false) {
   
   if (parts.length < 3) return;
   
+  const todayStr = getTodayStr();
+  const todayFormatted = getTodayFormattedDMY();
+  const minPay = `${todayStr}T00:00`;
+  const maxPay = `${todayStr}T23:59`;
+
   const year = parseInt(parts[0], 10);
   if (isNaN(year) || parts[0].length !== 4 || year < 2026 || year > 2027) {
     showToast('Año no válido. El año debe tener exactamente 4 dígitos (2026 o 2027).', 'error');
-    input.value = isDateTime ? '2026-10-19T12:00' : '2026-10-19';
+    input.value = isDateTime ? getNowIsoLocal() : todayStr;
     return;
   }
   
   if (isDateTime) {
-    if (val < MIN_PAY_DATE) {
-      showToast('No se pueden registrar pagos con fecha anterior a hoy (19 de Octubre de 2026).', 'error');
-      input.value = MIN_PAY_DATE;
-    } else if (val > MAX_PAY_DATE) {
+    if (val < minPay) {
+      showToast(`No se pueden registrar pagos con fecha anterior a hoy (${todayFormatted}).`, 'error');
+      input.value = minPay;
+    } else if (val > maxPay) {
       showToast('No se pueden registrar pagos en fechas futuras.', 'error');
-      input.value = MAX_PAY_DATE;
+      input.value = maxPay;
     }
   } else {
-    if (val < MIN_CREATION_DATE) {
-      showToast('No se pueden crear tareas con fecha de vencimiento anterior al día de hoy (19 de Octubre de 2026).', 'error');
-      input.value = MIN_CREATION_DATE;
+    if (val < todayStr) {
+      showToast(`No se pueden crear tareas con fecha de vencimiento anterior al día de hoy (${todayFormatted}).`, 'error');
+      input.value = todayStr;
     } else if (val > MAX_CREATION_DATE) {
       showToast('La fecha de vencimiento no puede exceder Diciembre de 2027.', 'error');
       input.value = MAX_CREATION_DATE;
@@ -451,10 +487,11 @@ function isValidAppDate(dateStr, isDateTime = false) {
   if (month < 1 || month > 12) return false;
   if (day < 1 || day > 31) return false;
 
+  const todayStr = getTodayStr();
   if (isDateTime) {
-    if (dateOnly !== TODAY_DATE_STR) return false;
+    if (dateOnly !== todayStr) return false;
   } else {
-    if (dateOnly < MIN_CREATION_DATE || dateOnly > MAX_CREATION_DATE) return false;
+    if (dateOnly < todayStr || dateOnly > MAX_CREATION_DATE) return false;
   }
   return true;
 }
@@ -952,12 +989,15 @@ function openNewDebtModal() {
     return;
   }
 
+  updateDateHelperTexts();
+
+  const todayStr = getTodayStr();
   const inpDueDate = document.getElementById('inpDueDate');
   if (inpDueDate) {
-    inpDueDate.min = MIN_CREATION_DATE;
+    inpDueDate.min = todayStr;
     inpDueDate.max = MAX_CREATION_DATE;
     const defaultVal = `${state.currentMonth}-25`;
-    inpDueDate.value = defaultVal < MIN_CREATION_DATE ? MIN_CREATION_DATE : defaultVal;
+    inpDueDate.value = defaultVal < todayStr ? todayStr : defaultVal;
   }
 
   state.selectedReceiptFile = null;
@@ -1039,13 +1079,16 @@ async function handleCreateDebt(e) {
     return;
   }
 
-  if (dueDate < MIN_CREATION_DATE) {
-    showToast('No se pueden registrar tareas con fecha anterior al día de hoy (19 de Octubre de 2026).', 'error');
+  const todayStr = getTodayStr();
+  const todayFormatted = getTodayFormattedDMY();
+
+  if (dueDate < todayStr) {
+    showToast(`No se pueden registrar tareas con fecha anterior al día de hoy (${todayFormatted}).`, 'error');
     return;
   }
 
   if (!isValidAppDate(dueDate, false)) {
-    showToast('Fecha de vencimiento no válida. El año debe tener 4 dígitos y encontrarse entre hoy (19/10/2026) y 31/12/2027.', 'error');
+    showToast(`Fecha de vencimiento no válida. El año debe tener 4 dígitos y encontrarse entre hoy (${todayFormatted}) y 31/12/2027.`, 'error');
     return;
   }
 
@@ -1124,11 +1167,14 @@ function openPayModal(debtId) {
   document.getElementById('payDebtConcept').textContent = debt.concept;
   document.getElementById('payDebtAmount').textContent = `${debt.currency || 'S/'} ${formatMoney(debt.amount)}`;
 
+  updateDateHelperTexts();
+
+  const todayStr = getTodayStr();
   const inpPayDate = document.getElementById('inpPayDate');
   if (inpPayDate) {
-    inpPayDate.min = MIN_PAY_DATE;
-    inpPayDate.max = MAX_PAY_DATE;
-    inpPayDate.value = '2026-10-19T12:00';
+    inpPayDate.min = `${todayStr}T00:00`;
+    inpPayDate.max = `${todayStr}T23:59`;
+    inpPayDate.value = getNowIsoLocal();
   }
   document.getElementById('inpTransferRef').value = `OP-${Date.now().toString().slice(-6)}`;
   document.getElementById('inpCashVoucher').value = `REC-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -1226,7 +1272,7 @@ async function handleExecutePayment(e) {
   const notes = document.getElementById('inpPaymentNotes').value.trim();
 
   if (!payDate || !isValidAppDate(payDate, true)) {
-    showToast('Fecha de pago inválida. Solo se pueden registrar pagos con fecha de hoy (19 de Octubre de 2026).', 'error');
+    showToast(`Fecha de pago inválida. Solo se pueden registrar pagos con fecha de hoy (${getTodayFormattedDMY()}).`, 'error');
     return;
   }
 

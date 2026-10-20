@@ -78,6 +78,18 @@ function parseBody(req) {
   });
 }
 
+function getSystemDateStrings() {
+  const now = new Date();
+  const utcDate = now.toISOString().slice(0, 10);
+  let limaDate;
+  try {
+    limaDate = now.toLocaleDateString('en-CA', { timeZone: 'America/Lima' });
+  } catch {
+    limaDate = utcDate;
+  }
+  return { utcDate, limaDate };
+}
+
 const server = http.createServer(async (req, res) => {
   const reqUrl = new URL(req.url, `http://${req.headers.host || 'localhost:3000'}`);
   const pathname = reqUrl.pathname;
@@ -246,11 +258,14 @@ const server = http.createServer(async (req, res) => {
           return sendJson(res, 400, { success: false, message: 'La fecha de vencimiento debe tener formato AAAA-MM-DD con año de 4 dígitos.' });
         }
         const dueYear = parseInt(dueMatch[1], 10);
-        // CRITICAL REQUIREMENT: Prohibido crear nada con fecha anterior a hoy (19 de Octubre de 2026) ni posterior a 2027
-        if (dueYear < 2026 || dueYear > 2027 || body.dueDate < '2026-10-19' || body.dueDate > '2027-12-31') {
+        // CRITICAL REQUIREMENT: Prohibido crear nada con fecha anterior a hoy ni posterior a 2027
+        const { limaDate, utcDate } = getSystemDateStrings();
+        const minAllowedDate = limaDate < utcDate ? limaDate : utcDate;
+
+        if (dueYear < 2026 || dueYear > 2027 || body.dueDate < minAllowedDate || body.dueDate > '2027-12-31') {
           return sendJson(res, 400, {
             success: false,
-            message: 'Fecha no permitida. No se pueden crear pagos o tareas con fecha anterior al día de hoy (19 de Octubre de 2026) ni posteriores a 2027.'
+            message: `Fecha no permitida. No se pueden crear pagos o tareas con fecha anterior al día de hoy (${limaDate}) ni posteriores a 2027.`
           });
         }
 
@@ -274,7 +289,7 @@ const server = http.createServer(async (req, res) => {
           managerAssumptionReason: '',
           receipts: Array.isArray(body.receipts) ? body.receipts : [],
           payment: null,
-          createdAt: '2026-10-19'
+          createdAt: limaDate
         };
 
         debts.push(newDebt);
@@ -297,13 +312,14 @@ const server = http.createServer(async (req, res) => {
           });
         }
 
-        // CRITICAL REQUIREMENT: Pagos solo con fecha de hoy (19 de Octubre de 2026)
-        const pDateOnly = body.paidDate ? String(body.paidDate).split('T')[0] : '2026-10-19';
+        // CRITICAL REQUIREMENT: Pagos solo con la fecha del día en que se registran (hoy)
+        const { limaDate, utcDate } = getSystemDateStrings();
+        const pDateOnly = body.paidDate ? String(body.paidDate).split('T')[0] : limaDate;
         const pMatch = pDateOnly.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-        if (!pMatch || pDateOnly !== '2026-10-19') {
+        if (!pMatch || (pDateOnly !== limaDate && pDateOnly !== utcDate)) {
           return sendJson(res, 400, {
             success: false,
-            message: 'Fecha de pago no permitida. Los pagos solo pueden registrarse con la fecha de hoy (19 de Octubre de 2026).'
+            message: `Fecha de pago no permitida. Los pagos solo pueden registrarse con la fecha de hoy (${limaDate}).`
           });
         }
 
@@ -344,7 +360,7 @@ const server = http.createServer(async (req, res) => {
 
         debts[index].status = 'Pagado';
         debts[index].payment = {
-          paidDate: body.paidDate || '2026-10-19T12:00',
+          paidDate: body.paidDate || `${limaDate}T12:00`,
           paidBy: body.paidBy || 'Ana Torres (Asistente Contable)',
           method: methodType,
           transactionRef: transactionRef,

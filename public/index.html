@@ -338,7 +338,7 @@
             <div class="form-group">
               <label class="form-label" for="inpDueDate">Fecha de Vencimiento<span class="req">*</span></label>
               <input type="date" id="inpDueDate" class="form-input" min="2026-10-19" max="2027-12-31" oninput="validateYearDigits(this)" onblur="enforceDateBounds(this)" required>
-              <span style="font-size: 0.72rem; color: var(--text-muted); display: block; margin-top: 3px;">Solo desde hoy (19/10/2026) hasta 31/12/2027 (no se admiten fechas pasadas)</span>
+              <span id="dueDateHelperText" style="font-size: 0.72rem; color: var(--text-muted); display: block; margin-top: 3px;">Solo desde hoy en adelante hasta 31/12/2027 (no se admiten fechas pasadas).</span>
             </div>
           </div>
 
@@ -461,8 +461,8 @@
               </div>
               <div class="form-group">
                 <label class="form-label" for="inpPayDate">Fecha del Pago</label>
-                <input type="datetime-local" id="inpPayDate" class="form-input" min="2026-10-19T00:00" max="2026-10-19T23:59" oninput="validateYearDigits(this, true)" onblur="enforceDateBounds(this, true)">
-                <span style="font-size: 0.72rem; color: var(--text-muted); display: block; margin-top: 3px;">Solo fecha de hoy (19/10/2026). No se permiten pagos en fechas pasadas ni futuras.</span>
+                <input type="datetime-local" id="inpPayDate" class="form-input" oninput="validateYearDigits(this, true)" onblur="enforceDateBounds(this, true)">
+                <span id="payDateHelperText" style="font-size: 0.72rem; color: var(--text-muted); display: block; margin-top: 3px;">Solo fecha de hoy. No se permiten pagos en fechas pasadas ni futuras.</span>
               </div>
             </div>
           </div>
