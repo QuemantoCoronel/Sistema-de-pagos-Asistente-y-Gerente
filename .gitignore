@@ -1,0 +1,20 @@
+# Dependency directories
+node_modules/
+package-lock.json
+
+# Environment and system files
+.env
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary and office lock files
+~$*
+*.tmp
+*.temp
+__pycache__/
+*.pyc
+
+# IDE files
+.vscode/
+.idea/

@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Sistema de control de pagos y cuentas por pagar en formato Post-it. Roles protegidos para Asistente y Gerente con semáforo inteligente de vencimientos.">
+  <title>PayControl - Cuentas por Pagar</title>
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="icon" type="image/jpeg" href="assets/logo.jpg">
+</head>
+<body>
+
+  <!-- ==========================================================================
+       PANTALLA DE LOGIN OBLIGATORIA (AUTENTICACIÓN GERENTE Y ASISTENTE)
+       ========================================================================== -->
+  <div class="login-overlay" id="loginOverlay">
+    <div class="login-card">
+      <img src="assets/logo.jpg" alt="PayControl Logo" class="login-logo">
+      <h2 class="login-title">Pay<span style="color: #3b82f6;">Control</span> Enterprise</h2>
+      <p class="login-subtitle">Gestión de Cuentas por Pagar &bull; Acceso Autorizado</p>
+
+      <div class="login-error-alert" id="loginErrorAlert">
+        Credenciales incorrectas. Verifique su correo o contraseña.
+      </div>
+
+      <form class="login-form" id="loginForm" onsubmit="handleLoginSubmit(event)">
+        <div class="form-group">
+          <label class="form-label" for="loginEmail">Correo Electrónico<span class="req">*</span></label>
+          <input type="email" id="loginEmail" class="form-input" placeholder="ejemplo@hotmail.com" required autocomplete="username">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="loginPassword">Contraseña<span class="req">*</span></label>
+          <input type="password" id="loginPassword" class="form-input" placeholder="••••••••" required autocomplete="current-password">
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 11px; margin-top: 8px;">
+          Iniciar Sesión
+        </button>
+      </form>
+
+      <!-- Quick Demo Access Buttons -->
+      <div class="login-demo-helper">
+        <div class="login-demo-helper-title">Accesos Rápidos de Demostración:</div>
+        
+        <button type="button" class="demo-account-btn" onclick="fillAndLogin('gerenteagile@hotmail.com', 'contraseña123')">
+          <div>
+            <strong style="display: block;">Rol Gerente General</strong>
+            <span style="font-size: 0.72rem; color: var(--text-muted);">gerenteagile@hotmail.com</span>
+          </div>
+          <span class="badge-pill indigo">Ingresar &rarr;</span>
+        </button>
+
+        <button type="button" class="demo-account-btn" onclick="fillAndLogin('asistenteagile@hotmail.com', 'contraseña123')">
+          <div>
+            <strong style="display: block;">Rol Asistente Contable</strong>
+            <span style="font-size: 0.72rem; color: var(--text-muted);">asistenteagile@hotmail.com</span>
+          </div>
+          <span class="badge-pill green">Ingresar &rarr;</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+
+  <!-- ==========================================================================
+       MAIN APP CONTAINER (SOLO VISIBLE TRAS AUTENTICARSE)
+       ========================================================================== -->
+  <div class="app-container" id="appContainer" style="display: none;">
+    
+    <!-- TOP HEADER -->
+    <header class="header-bar" id="appHeader">
+      <div class="brand-section">
+        <img src="assets/logo.jpg" alt="PayControl Logo" class="brand-logo-img">
+        <div class="brand-info">
+          <h1>Pay<span class="highlight">Control</span> Enterprise</h1>
+          <div class="company-tag">
+            <span class="dot"></span>
+            <span>TechSolutions Perú S.A.C. &bull; Cuentas por Pagar</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- User Profile & Quick Actions -->
+      <div class="user-profile-widget">
+        
+        <div class="user-badge-box">
+          <span class="user-name" id="currentUserName">Carlos Mendoza</span>
+          <span class="user-role" id="currentUserTitle">Gerente General</span>
+        </div>
+
+        <!-- Theme Toggle -->
+        <button class="icon-btn" id="btnToggleTheme" onclick="toggleTheme()" title="Cambiar Tema (Claro / Oscuro)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        </button>
+
+        <!-- Logout Button -->
+        <button type="button" class="btn-logout" onclick="handleLogout()" title="Cerrar Sesión Segura">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          Salir
+        </button>
+
+      </div>
+    </header>
+
+    <!-- ROLE DYNAMIC BANNER -->
+    <section class="role-banner gerente-mode" id="roleBanner">
+      <div class="role-banner-content">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <span id="roleBannerText">
+          <strong>Pantalla Principal de Gerencia:</strong> Visualización consolidada directa de las deudas del mes en formato Post-it ordenadas por fecha de vencimiento.
+        </span>
+      </div>
+    </section>
+
+    <!-- NAVIGATION & CONTROL TOOLBAR -->
+    <div class="controls-toolbar">
+      <!-- Month Navigator -->
+      <div class="month-navigator">
+        <button type="button" class="nav-arrow-btn" id="btnPrevMonth" onclick="navigateMonth(-1)" title="Mes Anterior">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        
+        <div class="current-month-display">
+          <span class="month-label" id="currentMonthDisplay">Octubre 2026</span>
+          <span class="month-sub" id="currentMonthSub">Periodo Actual</span>
+        </div>
+
+        <button type="button" class="nav-arrow-btn" id="btnNextMonth" onclick="navigateMonth(1)" title="Mes Siguiente">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+
+        <select class="month-quick-picker" id="monthPickerSelect" onchange="onMonthPickerChange(this.value)">
+          <option value="2026-09">Setiembre 2026 (Pasado)</option>
+          <option value="2026-10" selected>Octubre 2026 (Actual)</option>
+          <option value="2026-11">Noviembre 2026 (Siguiente)</option>
+          <option value="2026-12">Diciembre 2026</option>
+        </select>
+      </div>
+
+      <!-- View Switcher (Post-its vs Tabla) -->
+      <div class="view-mode-toggle">
+        <button type="button" class="view-btn active" id="btnViewPostits" onclick="setViewMode('postits')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          Vista Post-its
+        </button>
+        <button type="button" class="view-btn" id="btnViewTable" onclick="setViewMode('table')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          Vista Tabla
+        </button>
+      </div>
+
+      <!-- Action Buttons Based on Role -->
+      <div class="toolbar-actions" id="toolbarActions">
+        <!-- Injected via JavaScript based on active role -->
+      </div>
+    </div>
+
+    <!-- SUMMARY METRIC CARDS -->
+    <section class="summary-grid" id="summaryStats">
+      
+      <!-- Total Pagado en el Mes -->
+      <div class="summary-card paid">
+        <div class="card-top">
+          <span class="card-title">Total Pagado en el Mes</span>
+          <div class="card-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+        </div>
+        <div class="card-value" id="kpiTotalPaid">S/ 0.00</div>
+        <div class="card-subtext">
+          <span class="badge-pill green" id="kpiPaidPercent">0% liquidado</span>
+          <span id="kpiPaidCount">0 de 0 pagos</span>
+        </div>
+      </div>
+
+      <!-- Total Pendiente por Pagar -->
+      <div class="summary-card pending">
+        <div class="card-top">
+          <span class="card-title">Total Pendiente por Pagar</span>
+          <div class="card-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+        </div>
+        <div class="card-value" id="kpiTotalPending">S/ 0.00</div>
+        <div class="card-subtext">
+          <span class="badge-pill amber" id="kpiPendingCount">0 pendientes</span>
+          <span>Obligaciones por liquidar</span>
+        </div>
+      </div>
+
+      <!-- Deudas Críticas (Semáforo Rojo) -->
+      <div class="summary-card urgent">
+        <div class="card-top">
+          <span class="card-title">Atención Urgente (Rojo)</span>
+          <div class="card-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          </div>
+        </div>
+        <div class="card-value" id="kpiUrgentCount">0</div>
+        <div class="card-subtext">
+          <span class="badge-pill red">Vence mañana o vencido</span>
+          <span id="kpiSoonCount">+0 esta semana</span>
+        </div>
+      </div>
+
+      <!-- Control de Pagos en Efectivo -->
+      <div class="summary-card cash">
+        <div class="card-top">
+          <span class="card-title">Control de Efectivo / Caja</span>
+          <div class="card-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+          </div>
+        </div>
+        <div class="card-value" id="kpiCashTotal">S/ 0.00</div>
+        <div class="card-subtext">
+          <span class="badge-pill indigo" id="kpiCashCount">0 arqueos</span>
+          <span id="kpiBankTotal">Banco: S/ 0.00</span>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- COLOR CODING LEGEND & FILTER BAR -->
+    <div class="legend-container">
+      <div class="legend-items">
+        <span style="font-weight: 800; color: var(--text-muted); font-size: 0.76rem; text-transform: uppercase;">
+          Semáforo Post-it:
+        </span>
+        <div class="legend-item" title="Vence al día siguiente o ya se encuentra vencido">
+          <span class="legend-dot red"></span>
+          <span><strong>Rojo:</strong> Vence mañana o vencido</span>
+        </div>
+        <div class="legend-item" title="Vence en una semana (2 a 7 días)">
+          <span class="legend-dot orange"></span>
+          <span><strong>Naranja:</strong> Vence en una semana</span>
+        </div>
+        <div class="legend-item" title="Faltan 15 días o más para el vencimiento">
+          <span class="legend-dot white"></span>
+          <span><strong>Blanco / Neutro:</strong> Faltan 15+ días</span>
+        </div>
+        <div class="legend-item" title="Deuda cancelada con comprobante obligatorio">
+          <span class="legend-dot paid"></span>
+          <span><strong>Verde:</strong> Pagado con comprobante</span>
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <input type="text" id="searchInput" class="search-input" placeholder="Buscar proveedor o concepto..." oninput="onFilterChange()">
+        <select id="statusFilter" class="filter-select" onchange="onFilterChange()">
+          <option value="all">Todos los Post-its</option>
+          <option value="pending">Solo Pendientes</option>
+          <option value="paid">Solo Pagados</option>
+          <option value="urgent">Solo Urgentes (Rojo)</option>
+          <option value="manager">Asumidos por Gerente</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- ==========================================================================
+         1. VISTA POST-IT GRID (PREDETERMINADA Y AGRADABLE)
+         ========================================================================== -->
+    <div class="postit-grid" id="postitGrid">
+      <!-- Populated dynamically via JS -->
+    </div>
+
+    <!-- ==========================================================================
+         2. VISTA TABLA (ALTERNATIVA)
+         ========================================================================== -->
+    <div class="table-wrapper" id="tableWrapper" style="display: none;">
+      <table class="debts-table" id="debtsTable">
+        <thead>
+          <tr>
+            <th style="width: 130px;">Vencimiento</th>
+            <th>Proveedor / Destinatario</th>
+            <th>Concepto / Detalle</th>
+            <th style="width: 100px;">Prioridad</th>
+            <th style="width: 130px; text-align: right;">Importe</th>
+            <th style="width: 140px; text-align: center;">Recibos Recibidos</th>
+            <th style="width: 140px; text-align: center;">Estado</th>
+            <th style="width: 160px; text-align: center;">Comprobante de Pago</th>
+            <th style="width: 140px; text-align: center;" id="thAcciones">Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="debtsTableBody">
+          <!-- Populated dynamically via JS -->
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Empty state if no records -->
+    <div class="empty-state" id="emptyState" style="display: none;">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+      <p style="font-size: 1.05rem; font-weight: 700; color: var(--text-heading);">No hay deudas registradas para este periodo</p>
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">Usa el botón "+ Nueva Tarea de Pago" o navega a otro mes.</p>
+    </div>
+
+  </div> <!-- End .app-container -->
+
+
+  <!-- ==========================================================================
+       MODAL 1: REGISTRAR NUEVA TAREA DE PAGO (ROL ASISTENTE)
+       ========================================================================== -->
+  <div class="modal-overlay" id="modalNewDebt">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Crear Tarea de Pago de Deuda
+        </h3>
+        <button type="button" class="modal-close-btn" onclick="closeModal('modalNewDebt')">&times;</button>
+      </div>
+      <form id="formNewDebt" onsubmit="handleCreateDebt(event)">
+        <div class="modal-body">
+          
+          <div class="form-group">
+            <label class="form-label" for="inpProvider">Nombre de Proveedor / A quién se le paga<span class="req">*</span></label>
+            <input type="text" id="inpProvider" class="form-input" placeholder="Ej. Sedapal S.A., Enel Distribución, Sunat..." required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="inpConcept">Concepto o Descripción del Pago</label>
+            <input type="text" id="inpConcept" class="form-input" placeholder="Ej. Consumo de agua sede principal, Alquiler de local...">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="inpAmount">Importe (Monto S/)<span class="req">*</span></label>
+              <input type="number" id="inpAmount" class="form-input" step="0.01" min="0.10" placeholder="0.00" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="inpDueDate">Fecha de Vencimiento<span class="req">*</span></label>
+              <input type="date" id="inpDueDate" class="form-input" required>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="inpPriority">Prioridad<span class="req">*</span></label>
+              <select id="inpPriority" class="form-select" required>
+                <option value="Alta">Alta (Urgente)</option>
+                <option value="Media" selected>Media</option>
+                <option value="Baja">Baja</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="inpCategory">Categoría</label>
+              <select id="inpCategory" class="form-select">
+                <option value="Servicios Básicos">Servicios Básicos (Agua/Luz)</option>
+                <option value="Alquiler">Alquiler de Inmuebles</option>
+                <option value="Telecomunicaciones">Telecomunicaciones / Internet</option>
+                <option value="Impuestos">Impuestos (SUNAT)</option>
+                <option value="Proveedores">Proveedores de Insumos</option>
+                <option value="Servicios Profesionales">Servicios Profesionales</option>
+                <option value="Mantenimiento">Mantenimiento y Limpieza</option>
+                <option value="Otros">Otros</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Recurring toggle -->
+          <div class="form-group" style="margin-top: 4px;">
+            <label class="form-checkbox-label">
+              <input type="checkbox" id="inpIsRecurring" onchange="toggleRecurringOptions(this.checked)">
+              <span>¿Es un pago recurrente mensual? (ej. agua, luz, teléfono, alquiler)</span>
+            </label>
+          </div>
+
+          <div class="form-group" id="groupRecurringCategory" style="display: none;">
+            <label class="form-label" for="inpRecurringCategory">Tipo de Servicio Recurrente</label>
+            <input type="text" id="inpRecurringCategory" class="form-input" placeholder="Ej. Agua, Luz, Internet, Renta mensual...">
+          </div>
+
+          <!-- Attach Receipt / Invoice -->
+          <div class="form-group" style="margin-top: 18px;">
+            <label class="form-label">
+              Registrar Recibo o Factura Recibida (PDF o Imagen)
+              <span style="font-weight: 400; color: var(--text-dim);">(Recepción obligatoria de documentos contables)</span>
+            </label>
+            <div class="upload-dropzone" id="dropzoneReceipt" onclick="document.getElementById('fileReceipt').click()">
+              <input type="file" id="fileReceipt" accept="image/*,.pdf" style="display: none;" onchange="handleFileReceiptSelect(this)">
+              <div class="upload-icon">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="15" x2="12" y2="15"/></svg>
+              </div>
+              <p style="font-size: 0.88rem; font-weight: 700; color: var(--text-heading);">Haz clic o arrastra aquí el recibo o factura</p>
+              <p style="font-size: 0.76rem; color: var(--text-muted); margin-top: 3px;">Formatos válidos: PDF, JPG, PNG</p>
+            </div>
+            <div id="receiptPreviewContainer"></div>
+          </div>
+
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modalNewDebt')">Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btnSubmitNewDebt">Crear Tarea de Pago</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ==========================================================================
+       MODAL 2: REGISTRAR PAGO (ROL ASISTENTE) CON COMPROBANTE OBLIGATORIO
+       ========================================================================== -->
+  <div class="modal-overlay" id="modalPayDebt">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          Registrar Ejecución de Pago
+        </h3>
+        <button type="button" class="modal-close-btn" onclick="closeModal('modalPayDebt')">&times;</button>
+      </div>
+      <form id="formPayDebt" onsubmit="handleExecutePayment(event)">
+        <input type="hidden" id="payDebtId">
+        <div class="modal-body">
+          
+          <div style="background: var(--bg-card-subtle); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--border-medium); margin-bottom: 18px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Deuda a Cancelar:</span>
+                <h4 id="payDebtProvider" style="color: var(--text-heading); font-size: 1.05rem; margin-top: 2px;">Proveedor</h4>
+                <p id="payDebtConcept" style="font-size: 0.82rem; color: var(--text-muted);">Concepto</p>
+              </div>
+              <div style="text-align: right;">
+                <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Importe:</span>
+                <div id="payDebtAmount" style="font-size: 1.3rem; font-weight: 800; color: #10b981;">S/ 0.00</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Payment Method -->
+          <div class="form-group">
+            <label class="form-label">Método de Pago Realizado<span class="req">*</span></label>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+              <button type="button" class="btn btn-secondary" id="btnMethodTransfer" onclick="selectPaymentMethod('Transferencia')" style="justify-content: center; border-color: var(--accent-primary); background: rgba(59, 130, 246, 0.1);">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+                Transferencia Bancaria
+              </button>
+              <button type="button" class="btn btn-secondary" id="btnMethodCash" onclick="selectPaymentMethod('Efectivo')" style="justify-content: center;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                Pago en Efectivo
+              </button>
+            </div>
+            <input type="hidden" id="inpPaymentMethod" value="Transferencia">
+          </div>
+
+          <!-- Transfer fields -->
+          <div id="transferControlsGroup">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="inpTransferRef">N° de Operación / Referencia Bancaria</label>
+                <input type="text" id="inpTransferRef" class="form-input" placeholder="Ej. BCP-OPE-992384">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="inpPayDate">Fecha del Pago</label>
+                <input type="datetime-local" id="inpPayDate" class="form-input">
+              </div>
+            </div>
+          </div>
+
+          <!-- Cash controls -->
+          <div id="cashControlsGroup" class="cash-control-panel" style="display: none;">
+            <div class="cash-control-header">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><line x1="12" y1="18" x2="12" y2="6"/></svg>
+              Control de Pago en Efectivo
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="inpCashVoucher">N° de Recibo<span class="req">*</span></label>
+                <input type="text" id="inpCashVoucher" class="form-input" placeholder="Ej. REC-2186">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="inpCashCustodian">Custodio</label>
+                <input type="text" id="inpCashCustodian" class="form-input" value="Caja Chica Administración">
+              </div>
+            </div>
+            <div class="form-row" style="margin-bottom: 0;">
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label" for="inpCashReceiverRole">¿Quién recibe el dinero?<span class="req">*</span></label>
+                <select id="inpCashReceiverRole" class="form-select">
+                  <option value="Cobrador / Proveedor" selected>Cobrador / Proveedor</option>
+                  <option value="Dueño / Propietario">Dueño / Propietario</option>
+                  <option value="Persona en Recepción">Persona en Recepción</option>
+                  <option value="Asistente">Asistente</option>
+                  <option value="Otro">Otro</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label" for="inpCashReceiver">Nombre o Detalle (Opcional)</label>
+                <input type="text" id="inpCashReceiver" class="form-input" placeholder="Ej. Carlos Vega - DNI 40918231">
+              </div>
+            </div>
+          </div>
+
+          <!-- MANDATORY PROOF UPLOAD -->
+          <div class="form-group" style="margin-top: 18px;">
+            <label class="form-label" style="display: flex; justify-content: space-between;">
+              <span>Comprobante de Pago Obligatorio (PDF o Imagen)<span class="req">*</span></span>
+              <span style="color: #ef4444; font-weight: 700; font-size: 0.74rem;">[REQUISITO EXIGIDO]</span>
+            </label>
+            <div class="upload-dropzone required-missing" id="dropzonePaymentProof" onclick="document.getElementById('filePaymentProof').click()">
+              <input type="file" id="filePaymentProof" accept="image/*,.pdf" style="display: none;" onchange="handleFilePaymentProofSelect(this)" required>
+              <div class="upload-icon">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+              </div>
+              <p style="font-size: 0.88rem; font-weight: 700; color: var(--text-heading);" id="proofDropzoneLabel">
+                Adjunta aquí la constancia bancaria o recibo de caja firmado
+              </p>
+              <p style="font-size: 0.76rem; color: var(--text-muted); margin-top: 3px;">
+                El sistema NO permitirá marcar como pagado sin adjuntar este archivo.
+              </p>
+            </div>
+            <div id="paymentProofPreviewContainer"></div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="inpPaymentNotes">Observaciones o Notas Adicionales</label>
+            <input type="text" id="inpPaymentNotes" class="form-input" placeholder="Ej. Pago realizado puntualmente sin recargo">
+          </div>
+
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modalPayDebt')">Cancelar</button>
+          <button type="submit" class="btn btn-success" id="btnSubmitPayment" disabled>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            Confirmar y Marcar como Pagado
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ==========================================================================
+       MODAL 3: EXCEPCIÓN GERENTE (ASUMIR PAGO DIRECTAMENTE)
+       ========================================================================== -->
+  <div class="modal-overlay" id="modalManagerAssume">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title" style="color: #6366f1;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          Excepción de Gerencia: Asumir Pago Directo
+        </h3>
+        <button type="button" class="modal-close-btn" onclick="closeModal('modalManagerAssume')">&times;</button>
+      </div>
+      <form id="formManagerAssume" onsubmit="handleConfirmManagerAssume(event)">
+        <input type="hidden" id="assumeDebtId">
+        <div class="modal-body">
+          <div style="background: rgba(99, 102, 241, 0.12); border: 1px solid rgba(99, 102, 241, 0.35); padding: 14px; border-radius: var(--radius-md); margin-bottom: 18px;">
+            <p style="font-size: 0.88rem; color: var(--text-heading); line-height: 1.5;">
+              Como <strong>Gerente General</strong>, por regla no pagas deudas salvo excepciones especiales donde tú mismo indiques que te encargarás personalmente.
+            </p>
+          </div>
+
+          <div style="background: var(--bg-card-subtle); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--border-medium); margin-bottom: 18px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Proveedor:</span>
+                <h4 id="assumeProvider" style="color: var(--text-heading); font-size: 1.05rem;">-</h4>
+              </div>
+              <div style="text-align: right;">
+                <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Monto:</span>
+                <div id="assumeAmount" style="font-size: 1.25rem; font-weight: 800; color: #6366f1;">S/ 0.00</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="inpManagerReason">Motivo / Justificación de la Excepción<span class="req">*</span></label>
+            <textarea id="inpManagerReason" class="form-textarea" rows="3" placeholder="Ej. Negociación directa de addenda contractual con socios o pago con fondo confidencial..." required></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modalManagerAssume')">Cancelar</button>
+          <button type="submit" class="btn btn-primary" style="background: #4f46e5; border-color: #6366f1;">
+            Asumir Responsabilidad de este Pago
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ==========================================================================
+       MODAL 3B: AVISO DE PAGO GESTIONADO POR GERENCIA GENERAL
+       ========================================================================== -->
+  <div class="modal-overlay" id="modalManagerAssumedNotice">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title" style="color: #6366f1;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          Gestionado por el Gerente General
+        </h3>
+        <button type="button" class="modal-close-btn" onclick="closeModal('modalManagerAssumedNotice')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="background: rgba(99, 102, 241, 0.12); border: 1px solid rgba(99, 102, 241, 0.35); border-radius: var(--radius-md); padding: 16px; margin-bottom: 18px;">
+          <div style="display: flex; align-items: flex-start; gap: 12px;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2" style="flex-shrink: 0; margin-top: 2px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            <div>
+              <strong style="color: var(--text-heading); font-size: 0.95rem; display: block; margin-bottom: 4px;">
+                Pago Bajo Supervisión de Gerencia
+              </strong>
+              <p style="font-size: 0.85rem; color: var(--text-main); line-height: 1.45;">
+                El <strong>Gerente General (Carlos Mendoza)</strong> ha indicado explícitamente que él se encargará de realizar y gestionar este pago directamente. Por esta razón, el asistente contable no debe liquidarlo ni registrarlo.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div style="background: var(--bg-card-subtle); padding: 16px; border-radius: var(--radius-md); border: 1px solid var(--border-medium); margin-bottom: 14px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <div>
+              <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Proveedor / Destinatario:</span>
+              <h4 id="noticeProvider" style="color: var(--text-heading); font-size: 1.1rem; margin-top: 2px;">-</h4>
+            </div>
+            <div style="text-align: right;">
+              <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Importe:</span>
+              <div id="noticeAmount" style="font-size: 1.25rem; font-weight: 800; color: #6366f1;">S/ 0.00</div>
+            </div>
+          </div>
+
+          <div>
+            <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Motivo registrado por Gerencia:</span>
+            <p id="noticeReason" style="font-size: 0.88rem; color: var(--text-heading); font-style: italic; margin-top: 5px; padding: 12px; background: var(--bg-input); border-radius: 6px; border: 1px solid var(--border-subtle); line-height: 1.45;">
+              "-"
+            </p>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modalManagerAssumedNotice')">
+          Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ==========================================================================
+       MODAL 4: VISOR DE DOCUMENTOS
+       ========================================================================== -->
+  <div class="modal-overlay" id="modalDocViewer">
+    <div class="modal-content wide">
+      <div class="modal-header">
+        <h3 class="modal-title" id="viewerTitle">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          Visor de Documento Contable
+        </h3>
+        <button type="button" class="modal-close-btn" onclick="closeModal('modalDocViewer')">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 18px 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <div>
+            <span id="viewerDocName" style="font-weight: 700; color: var(--text-heading); font-size: 0.95rem;">documento.pdf</span>
+            <span id="viewerDocMeta" style="font-size: 0.78rem; color: var(--text-muted); margin-left: 8px;"></span>
+          </div>
+          <a id="viewerDownloadLink" href="#" target="_blank" download class="btn btn-secondary btn-sm">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Descargar
+          </a>
+        </div>
+
+        <div class="document-frame-container" id="viewerFrameContainer">
+          <!-- Dynamic iframe or img -->
+        </div>
+
+        <div id="viewerExtraDetails" style="margin-top: 14px; font-size: 0.82rem; color: var(--text-muted);"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modalDocViewer')">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ==========================================================================
+       MODAL 5: RECURRENTES DEL PRÓXIMO MES
+       ========================================================================== -->
+  <div class="modal-overlay" id="modalRecurring">
+    <div class="modal-content wide">
+      <div class="modal-header">
+        <h3 class="modal-title">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+          Pagos Recurrentes del Próximo Mes (Agua, Luz, Servicios)
+        </h3>
+        <button type="button" class="modal-close-btn" onclick="closeModal('modalRecurring')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 16px;">
+          Esta herramienta permite pre-programar automáticamente las obligaciones fijas recurrentes del próximo mes para mantener la planificación contable al día.
+        </p>
+
+        <div id="recurringListContainer" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px;">
+          <!-- Dynamically populated -->
+        </div>
+
+        <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: var(--radius-md); padding: 14px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <strong style="color: #10b981; font-size: 0.95rem;">¿Deseas programar las cuotas para el mes entrante?</strong>
+              <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;" id="recurringTargetDesc">
+                Se generarán las tareas de pago pendientes correspondientes.
+              </p>
+            </div>
+            <button type="button" class="btn btn-success" id="btnGenerateRecurring" onclick="handleGenerateNextMonthRecurring()">
+              Programar para Noviembre 2026
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modalRecurring')">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Core App Logic -->
+  <script src="js/app.js"></script>
+</body>
+</html>

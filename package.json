@@ -1,0 +1,13 @@
+{
+  "name": "sistema-control-pagos",
+  "version": "1.0.0",
+  "description": "Sistema web de control de pagos y cuentas por pagar para Asistente y Gerente",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": ["pagos", "cuentas-por-pagar", "asistente", "gerente", "finanzas"],
+  "author": "Antigravity",
+  "license": "MIT"
+}
