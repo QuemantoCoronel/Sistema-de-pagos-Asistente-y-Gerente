@@ -358,6 +358,67 @@ function updateMonthDisplay() {
 }
 
 // ==========================================================================
+// DATE CONSTRAINTS & 4-DIGIT YEAR ENFORCEMENT
+// ==========================================================================
+const MIN_ALLOWED_DATE = '2026-09-01';
+const MAX_ALLOWED_DATE = '2027-12-31';
+
+function validateYearDigits(input, isDateTime = false) {
+  if (!input || !input.value) return;
+  const val = input.value;
+  const parts = val.split('-');
+  if (parts.length > 0 && parts[0].length > 4) {
+    // Truncate year to 4 digits immediately
+    const year4 = parts[0].slice(0, 4);
+    parts[0] = year4;
+    input.value = parts.join('-');
+  }
+}
+
+function enforceDateBounds(input, isDateTime = false) {
+  if (!input || !input.value) return;
+  const val = input.value;
+  const dateOnly = isDateTime ? val.split('T')[0] : val;
+  const parts = dateOnly.split('-');
+  
+  if (parts.length < 3) return;
+  
+  const year = parseInt(parts[0], 10);
+  if (isNaN(year) || parts[0].length !== 4 || year < 2026 || year > 2027) {
+    showToast('Año no válido. El año debe tener exactamente 4 dígitos y estar entre 2026 y 2027.', 'error');
+    input.value = isDateTime ? `${state.currentMonth}-25T12:00` : `${state.currentMonth}-25`;
+    return;
+  }
+  
+  const minVal = isDateTime ? `${MIN_ALLOWED_DATE}T00:00` : MIN_ALLOWED_DATE;
+  const maxVal = isDateTime ? `${MAX_ALLOWED_DATE}T23:59` : MAX_ALLOWED_DATE;
+  
+  if (input.value < minVal) {
+    showToast('Fecha no permitida. No puede ser anterior a Setiembre 2026.', 'error');
+    input.value = minVal;
+  } else if (input.value > maxVal) {
+    showToast('Fecha no permitida. No puede ser posterior a Diciembre 2027.', 'error');
+    input.value = maxVal;
+  }
+}
+
+function isValidAppDate(dateStr, isDateTime = false) {
+  if (!dateStr || typeof dateStr !== 'string') return false;
+  const dateOnly = isDateTime ? dateStr.split('T')[0] : dateStr;
+  const match = dateOnly.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return false;
+  const [_, y, m, d] = match;
+  const year = parseInt(y, 10);
+  const month = parseInt(m, 10);
+  const day = parseInt(d, 10);
+  if (y.length !== 4 || year < 2026 || year > 2027) return false;
+  if (month < 1 || month > 12) return false;
+  if (day < 1 || day > 31) return false;
+  if (dateOnly < MIN_ALLOWED_DATE || dateOnly > MAX_ALLOWED_DATE) return false;
+  return true;
+}
+
+// ==========================================================================
 // COLOR CODING CALCULATION (CRITICAL SPECIFICATION)
 // Rojo: Vence al día siguiente o ya se encuentra vencido (diff <= 1)
 // Naranja: Vence en una semana (1 < diff <= 7)
@@ -831,6 +892,8 @@ function openNewDebtModal() {
 
   const inpDueDate = document.getElementById('inpDueDate');
   if (inpDueDate) {
+    inpDueDate.min = MIN_ALLOWED_DATE;
+    inpDueDate.max = MAX_ALLOWED_DATE;
     inpDueDate.value = `${state.currentMonth}-25`;
   }
 
@@ -895,6 +958,11 @@ async function handleCreateDebt(e) {
 
   if (!provider || !amount || !dueDate) {
     showToast('Por favor completa todos los campos requeridos.', 'error');
+    return;
+  }
+
+  if (!isValidAppDate(dueDate)) {
+    showToast('Fecha de vencimiento no válida. El año debe tener 4 dígitos y encontrarse entre Setiembre 2026 y Diciembre 2027.', 'error');
     return;
   }
 
@@ -975,7 +1043,12 @@ function openPayModal(debtId) {
 
   const now = new Date();
   const localIsoDate = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-  document.getElementById('inpPayDate').value = localIsoDate;
+  const inpPayDate = document.getElementById('inpPayDate');
+  if (inpPayDate) {
+    inpPayDate.min = `${MIN_ALLOWED_DATE}T00:00`;
+    inpPayDate.max = `${MAX_ALLOWED_DATE}T23:59`;
+    inpPayDate.value = localIsoDate;
+  }
   document.getElementById('inpTransferRef').value = `OP-${Date.now().toString().slice(-6)}`;
   document.getElementById('inpCashVoucher').value = `REC-${Math.floor(1000 + Math.random() * 9000)}`;
 
@@ -1070,6 +1143,11 @@ async function handleExecutePayment(e) {
   const method = state.activePaymentMethod;
   const payDate = document.getElementById('inpPayDate').value;
   const notes = document.getElementById('inpPaymentNotes').value.trim();
+
+  if (payDate && !isValidAppDate(payDate, true)) {
+    showToast('Fecha de pago no válida. El año debe tener 4 dígitos y encontrarse entre Setiembre 2026 y Diciembre 2027.', 'error');
+    return;
+  }
 
   let cashControl = null;
   let transactionRef = '';

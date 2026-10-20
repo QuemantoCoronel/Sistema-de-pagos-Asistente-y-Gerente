@@ -337,7 +337,8 @@
             </div>
             <div class="form-group">
               <label class="form-label" for="inpDueDate">Fecha de Vencimiento<span class="req">*</span></label>
-              <input type="date" id="inpDueDate" class="form-input" required>
+              <input type="date" id="inpDueDate" class="form-input" min="2026-09-01" max="2027-12-31" oninput="validateYearDigits(this)" onblur="enforceDateBounds(this)" required>
+              <span style="font-size: 0.72rem; color: var(--text-muted); display: block; margin-top: 3px;">Rango: Setiembre 2026 a Diciembre 2027 (año de 4 dígitos)</span>
             </div>
           </div>
 
@@ -460,7 +461,8 @@
               </div>
               <div class="form-group">
                 <label class="form-label" for="inpPayDate">Fecha del Pago</label>
-                <input type="datetime-local" id="inpPayDate" class="form-input">
+                <input type="datetime-local" id="inpPayDate" class="form-input" min="2026-09-01T00:00" max="2027-12-31T23:59" oninput="validateYearDigits(this, true)" onblur="enforceDateBounds(this, true)">
+                <span style="font-size: 0.72rem; color: var(--text-muted); display: block; margin-top: 3px;">Rango: Setiembre 2026 a Diciembre 2027</span>
               </div>
             </div>
           </div>

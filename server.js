@@ -225,6 +225,15 @@ const server = http.createServer(async (req, res) => {
           return sendJson(res, 400, { success: false, message: 'Proveedor, importe y fecha de vencimiento son obligatorios.' });
         }
 
+        const dueMatch = String(body.dueDate).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!dueMatch) {
+          return sendJson(res, 400, { success: false, message: 'La fecha de vencimiento debe tener formato AAAA-MM-DD con año de 4 dígitos.' });
+        }
+        const dueYear = parseInt(dueMatch[1], 10);
+        if (dueYear < 2026 || dueYear > 2027 || body.dueDate < '2026-09-01' || body.dueDate > '2027-12-31') {
+          return sendJson(res, 400, { success: false, message: 'Fecha de vencimiento no permitida. El rango válido es de Setiembre 2026 a Diciembre 2027.' });
+        }
+
         const debts = readDebts();
         const newId = 'PAY-' + body.dueDate.replace(/-/g, '').substring(0, 6) + '-' + String(debts.length + 1).padStart(3, '0');
 
@@ -266,6 +275,18 @@ const server = http.createServer(async (req, res) => {
             success: false,
             message: 'Requisito obligatorio: Debe adjuntar el comprobante de pago en formato PDF o Imagen para marcar como pagada.'
           });
+        }
+
+        if (body.paidDate) {
+          const pDateOnly = String(body.paidDate).split('T')[0];
+          const pMatch = pDateOnly.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+          if (!pMatch) {
+            return sendJson(res, 400, { success: false, message: 'La fecha de pago debe tener año de 4 dígitos.' });
+          }
+          const pYear = parseInt(pMatch[1], 10);
+          if (pYear < 2026 || pYear > 2027 || pDateOnly < '2026-09-01' || pDateOnly > '2027-12-31') {
+            return sendJson(res, 400, { success: false, message: 'Fecha de pago fuera de rango permitido (Setiembre 2026 a Diciembre 2027).' });
+          }
         }
 
         const debts = readDebts();
