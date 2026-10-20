@@ -662,20 +662,27 @@ function calculateDueAlert(dueDateStr, isPaid) {
 
 // ==========================================================================
 // JERARQUÍA DE ORDENAMIENTO ESTRICTA:
-// 1. Los vencidos (máxima urgencia)
+// 1. Los vencidos (máxima urgencia - el que tiene más días atrasados va primero)
 // 2. Los a punto de vencer (Hoy o Mañana)
 // 3. Los próximos (2 a 14 días)
 // 4. Los que todavía tienen tiempo (15+ días)
-// 5. Administradas por el gerente (quedan abajo)
+// 5. Administradas por el gerente no vencidas (quedan abajo de las pendientes)
 // 6. Las que ya se quedaron pagadas (quedan hasta el fondo absoluto)
 // ==========================================================================
 function getDebtSortPriority(d) {
+  // Las pagadas siempre van al fondo absoluto
   if (d.status === 'Pagado') return 6;
-  if (d.managerAssumed) return 5;
 
   const alert = calculateDueAlert(d.dueDate, false);
   const diffDays = alert.diffDays;
-  if (diffDays < 0) return 1; // Vencidos
+
+  // MÁXIMA PRIORIDAD ABSOLUTA: Cuentas vencidas (diffDays < 0).
+  // Aunque hayan sido asumidas por gerencia, una cuenta vencida es crítica y debe figurar arriba de todo.
+  if (diffDays < 0) return 1;
+
+  // Si no está vencida pero fue asumida por gerencia, queda al final de las pendientes ordinarias
+  if (d.managerAssumed) return 5;
+
   if (diffDays <= 1) return 2; // Vence hoy o mañana
   if (diffDays <= 14) return 3; // Próximos
   return 4; // Con tiempo suficiente (15+ días)
