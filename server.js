@@ -487,10 +487,10 @@ const server = http.createServer(async (req, res) => {
 });
 
 function startServer(portToUse) {
-  server.listen(portToUse, () => {
+  server.listen(portToUse, '0.0.0.0', () => {
     console.log(`====================================================`);
     console.log(` SISTEMA DE CONTROL DE PAGOS - CUENTAS POR PAGAR`);
-    console.log(` Servidor activo en http://localhost:${portToUse}`);
+    console.log(` Servidor activo en http://0.0.0.0:${portToUse}`);
     console.log(` Roles: Asistente & Gerente`);
     console.log(`====================================================`);
   });
