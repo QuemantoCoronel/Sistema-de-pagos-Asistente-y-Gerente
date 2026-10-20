@@ -253,7 +253,7 @@
       </div>
 
       <div class="filter-group">
-        <input type="text" id="searchInput" class="search-input" placeholder="Buscar proveedor o concepto..." oninput="onFilterChange()">
+        <input type="text" id="searchInput" class="search-input" placeholder="Buscar proveedor o concepto..." maxlength="60" oninput="onFilterChange()">
         <select id="statusFilter" class="filter-select" onchange="onFilterChange()">
           <option value="all">Todos los Post-its</option>
           <option value="pending">Solo Pendientes</option>
@@ -322,23 +322,23 @@
           
           <div class="form-group">
             <label class="form-label" for="inpProvider">Nombre de Proveedor / A quién se le paga<span class="req">*</span></label>
-            <input type="text" id="inpProvider" class="form-input" placeholder="Ej. Sedapal S.A., Enel Distribución, Sunat..." required>
+            <input type="text" id="inpProvider" class="form-input" placeholder="Ej. Sedapal S.A., Enel Distribución, Sunat..." minlength="3" maxlength="100" required>
           </div>
 
           <div class="form-group">
             <label class="form-label" for="inpConcept">Concepto o Descripción del Pago</label>
-            <input type="text" id="inpConcept" class="form-input" placeholder="Ej. Consumo de agua sede principal, Alquiler de local...">
+            <input type="text" id="inpConcept" class="form-input" placeholder="Ej. Consumo de agua sede principal, Alquiler de local..." maxlength="200">
           </div>
 
           <div class="form-row">
             <div class="form-group">
               <label class="form-label" for="inpAmount">Importe (Monto S/)<span class="req">*</span></label>
-              <input type="number" id="inpAmount" class="form-input" step="0.01" min="0.10" placeholder="0.00" required>
+              <input type="number" id="inpAmount" class="form-input" step="0.01" min="0.10" max="1000000.00" placeholder="0.00" oninput="validateAmountInput(this)" required>
             </div>
             <div class="form-group">
               <label class="form-label" for="inpDueDate">Fecha de Vencimiento<span class="req">*</span></label>
-              <input type="date" id="inpDueDate" class="form-input" min="2026-09-01" max="2027-12-31" oninput="validateYearDigits(this)" onblur="enforceDateBounds(this)" required>
-              <span style="font-size: 0.72rem; color: var(--text-muted); display: block; margin-top: 3px;">Rango: Setiembre 2026 a Diciembre 2027 (año de 4 dígitos)</span>
+              <input type="date" id="inpDueDate" class="form-input" min="2026-10-19" max="2027-12-31" oninput="validateYearDigits(this)" onblur="enforceDateBounds(this)" required>
+              <span style="font-size: 0.72rem; color: var(--text-muted); display: block; margin-top: 3px;">Solo desde hoy (19/10/2026) hasta 31/12/2027 (no se admiten fechas pasadas)</span>
             </div>
           </div>
 
@@ -376,7 +376,7 @@
 
           <div class="form-group" id="groupRecurringCategory" style="display: none;">
             <label class="form-label" for="inpRecurringCategory">Tipo de Servicio Recurrente</label>
-            <input type="text" id="inpRecurringCategory" class="form-input" placeholder="Ej. Agua, Luz, Internet, Renta mensual...">
+            <input type="text" id="inpRecurringCategory" class="form-input" placeholder="Ej. Agua, Luz, Internet, Renta mensual..." maxlength="60">
           </div>
 
           <!-- Attach Receipt / Invoice -->
@@ -457,12 +457,12 @@
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label" for="inpTransferRef">N° de Operación / Referencia Bancaria</label>
-                <input type="text" id="inpTransferRef" class="form-input" placeholder="Ej. BCP-OPE-992384">
+                <input type="text" id="inpTransferRef" class="form-input" placeholder="Ej. BCP-OPE-992384" minlength="3" maxlength="50">
               </div>
               <div class="form-group">
                 <label class="form-label" for="inpPayDate">Fecha del Pago</label>
-                <input type="datetime-local" id="inpPayDate" class="form-input" min="2026-09-01T00:00" max="2027-12-31T23:59" oninput="validateYearDigits(this, true)" onblur="enforceDateBounds(this, true)">
-                <span style="font-size: 0.72rem; color: var(--text-muted); display: block; margin-top: 3px;">Rango: Setiembre 2026 a Diciembre 2027</span>
+                <input type="datetime-local" id="inpPayDate" class="form-input" min="2026-10-19T00:00" max="2026-10-19T23:59" oninput="validateYearDigits(this, true)" onblur="enforceDateBounds(this, true)">
+                <span style="font-size: 0.72rem; color: var(--text-muted); display: block; margin-top: 3px;">Solo fecha de hoy (19/10/2026). No se permiten pagos en fechas pasadas ni futuras.</span>
               </div>
             </div>
           </div>
@@ -476,11 +476,11 @@
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label" for="inpCashVoucher">N° de Recibo<span class="req">*</span></label>
-                <input type="text" id="inpCashVoucher" class="form-input" placeholder="Ej. REC-2186">
+                <input type="text" id="inpCashVoucher" class="form-input" placeholder="Ej. REC-2186" minlength="2" maxlength="30">
               </div>
               <div class="form-group">
                 <label class="form-label" for="inpCashCustodian">Custodio</label>
-                <input type="text" id="inpCashCustodian" class="form-input" value="Caja Chica Administración">
+                <input type="text" id="inpCashCustodian" class="form-input" value="Caja Chica Administración" minlength="3" maxlength="60">
               </div>
             </div>
             <div class="form-row" style="margin-bottom: 0;">
@@ -496,7 +496,7 @@
               </div>
               <div class="form-group" style="margin-bottom: 0;">
                 <label class="form-label" for="inpCashReceiver">Nombre o Detalle (Opcional)</label>
-                <input type="text" id="inpCashReceiver" class="form-input" placeholder="Ej. Carlos Vega - DNI 40918231">
+                <input type="text" id="inpCashReceiver" class="form-input" placeholder="Ej. Carlos Vega - DNI 40918231" maxlength="100">
               </div>
             </div>
           </div>
@@ -524,7 +524,7 @@
 
           <div class="form-group">
             <label class="form-label" for="inpPaymentNotes">Observaciones o Notas Adicionales</label>
-            <input type="text" id="inpPaymentNotes" class="form-input" placeholder="Ej. Pago realizado puntualmente sin recargo">
+            <input type="text" id="inpPaymentNotes" class="form-input" placeholder="Ej. Pago realizado puntualmente sin recargo" maxlength="250">
           </div>
 
         </div>
@@ -576,7 +576,7 @@
 
           <div class="form-group">
             <label class="form-label" for="inpManagerReason">Motivo / Justificación de la Excepción<span class="req">*</span></label>
-            <textarea id="inpManagerReason" class="form-textarea" rows="3" placeholder="Ej. Negociación directa de addenda contractual con socios o pago con fondo confidencial..." required></textarea>
+            <textarea id="inpManagerReason" class="form-textarea" rows="3" placeholder="Ej. Negociación directa de addenda contractual con socios o pago con fondo confidencial..." minlength="5" maxlength="300" required></textarea>
           </div>
         </div>
         <div class="modal-footer">

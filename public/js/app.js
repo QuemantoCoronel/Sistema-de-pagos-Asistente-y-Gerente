@@ -302,7 +302,17 @@ function navigateMonth(offset) {
     year++;
   }
 
-  state.currentMonth = `${year}-${String(month).padStart(2, '0')}`;
+  const nextMonthStr = `${year}-${String(month).padStart(2, '0')}`;
+  if (nextMonthStr < '2026-09') {
+    showToast('No existen registros anteriores a Setiembre de 2026.', 'info');
+    return;
+  }
+  if (nextMonthStr > '2027-12') {
+    showToast('Límite del calendario alcanzado (Diciembre 2027).', 'info');
+    return;
+  }
+
+  state.currentMonth = nextMonthStr;
   syncMonthSelect();
   loadData();
 }
@@ -358,10 +368,29 @@ function updateMonthDisplay() {
 }
 
 // ==========================================================================
-// DATE CONSTRAINTS & 4-DIGIT YEAR ENFORCEMENT
+// DATE & INPUT CONSTRAINTS (PROHIBIDO CREAR PAGOS O FECHAS ANTERIORES A HOY 19/10/2026)
 // ==========================================================================
-const MIN_ALLOWED_DATE = '2026-09-01';
-const MAX_ALLOWED_DATE = '2027-12-31';
+const TODAY_DATE_STR = '2026-10-19';
+const MIN_CREATION_DATE = '2026-10-19'; // No se permite crear nada anterior a hoy
+const MAX_CREATION_DATE = '2027-12-31'; // Hasta fin de 2027
+const MIN_PAY_DATE = '2026-10-19T00:00';
+const MAX_PAY_DATE = '2026-10-19T23:59'; // Pagos solo en fecha de hoy
+
+function validateAmountInput(input) {
+  if (!input || input.value === '') return;
+  let val = parseFloat(input.value);
+  if (isNaN(val)) {
+    input.value = '';
+    return;
+  }
+  if (val < 0) {
+    input.value = '0.10';
+    showToast('El importe no puede ser negativo.', 'error');
+  } else if (val > 1000000) {
+    input.value = '1000000.00';
+    showToast('El importe máximo permitido es S/ 1,000,000.00.', 'error');
+  }
+}
 
 function validateYearDigits(input, isDateTime = false) {
   if (!input || !input.value) return;
@@ -385,20 +414,27 @@ function enforceDateBounds(input, isDateTime = false) {
   
   const year = parseInt(parts[0], 10);
   if (isNaN(year) || parts[0].length !== 4 || year < 2026 || year > 2027) {
-    showToast('Año no válido. El año debe tener exactamente 4 dígitos y estar entre 2026 y 2027.', 'error');
-    input.value = isDateTime ? `${state.currentMonth}-25T12:00` : `${state.currentMonth}-25`;
+    showToast('Año no válido. El año debe tener exactamente 4 dígitos (2026 o 2027).', 'error');
+    input.value = isDateTime ? '2026-10-19T12:00' : '2026-10-19';
     return;
   }
   
-  const minVal = isDateTime ? `${MIN_ALLOWED_DATE}T00:00` : MIN_ALLOWED_DATE;
-  const maxVal = isDateTime ? `${MAX_ALLOWED_DATE}T23:59` : MAX_ALLOWED_DATE;
-  
-  if (input.value < minVal) {
-    showToast('Fecha no permitida. No puede ser anterior a Setiembre 2026.', 'error');
-    input.value = minVal;
-  } else if (input.value > maxVal) {
-    showToast('Fecha no permitida. No puede ser posterior a Diciembre 2027.', 'error');
-    input.value = maxVal;
+  if (isDateTime) {
+    if (val < MIN_PAY_DATE) {
+      showToast('No se pueden registrar pagos con fecha anterior a hoy (19 de Octubre de 2026).', 'error');
+      input.value = MIN_PAY_DATE;
+    } else if (val > MAX_PAY_DATE) {
+      showToast('No se pueden registrar pagos en fechas futuras.', 'error');
+      input.value = MAX_PAY_DATE;
+    }
+  } else {
+    if (val < MIN_CREATION_DATE) {
+      showToast('No se pueden crear tareas con fecha de vencimiento anterior al día de hoy (19 de Octubre de 2026).', 'error');
+      input.value = MIN_CREATION_DATE;
+    } else if (val > MAX_CREATION_DATE) {
+      showToast('La fecha de vencimiento no puede exceder Diciembre de 2027.', 'error');
+      input.value = MAX_CREATION_DATE;
+    }
   }
 }
 
@@ -414,7 +450,12 @@ function isValidAppDate(dateStr, isDateTime = false) {
   if (y.length !== 4 || year < 2026 || year > 2027) return false;
   if (month < 1 || month > 12) return false;
   if (day < 1 || day > 31) return false;
-  if (dateOnly < MIN_ALLOWED_DATE || dateOnly > MAX_ALLOWED_DATE) return false;
+
+  if (isDateTime) {
+    if (dateOnly !== TODAY_DATE_STR) return false;
+  } else {
+    if (dateOnly < MIN_CREATION_DATE || dateOnly > MAX_CREATION_DATE) return false;
+  }
   return true;
 }
 
@@ -913,9 +954,10 @@ function openNewDebtModal() {
 
   const inpDueDate = document.getElementById('inpDueDate');
   if (inpDueDate) {
-    inpDueDate.min = MIN_ALLOWED_DATE;
-    inpDueDate.max = MAX_ALLOWED_DATE;
-    inpDueDate.value = `${state.currentMonth}-25`;
+    inpDueDate.min = MIN_CREATION_DATE;
+    inpDueDate.max = MAX_CREATION_DATE;
+    const defaultVal = `${state.currentMonth}-25`;
+    inpDueDate.value = defaultVal < MIN_CREATION_DATE ? MIN_CREATION_DATE : defaultVal;
   }
 
   state.selectedReceiptFile = null;
@@ -977,13 +1019,33 @@ async function handleCreateDebt(e) {
   const isRecurring = document.getElementById('inpIsRecurring').checked;
   const recurringCategory = document.getElementById('inpRecurringCategory').value.trim() || category;
 
-  if (!provider || !amount || !dueDate) {
-    showToast('Por favor completa todos los campos requeridos.', 'error');
+  if (!provider || isNaN(amount) || !dueDate) {
+    showToast('Por favor completa todos los campos obligatorios.', 'error');
     return;
   }
 
-  if (!isValidAppDate(dueDate)) {
-    showToast('Fecha de vencimiento no válida. El año debe tener 4 dígitos y encontrarse entre Setiembre 2026 y Diciembre 2027.', 'error');
+  if (provider.length < 3 || provider.length > 100) {
+    showToast('El nombre del proveedor debe tener entre 3 y 100 caracteres.', 'error');
+    return;
+  }
+
+  if (!/[a-zA-Z0-9]/.test(provider)) {
+    showToast('El nombre del proveedor debe contener letras o números válidos.', 'error');
+    return;
+  }
+
+  if (amount < 0.10 || amount > 1000000.00) {
+    showToast('El importe debe ser un monto válido entre S/ 0.10 y S/ 1,000,000.00.', 'error');
+    return;
+  }
+
+  if (dueDate < MIN_CREATION_DATE) {
+    showToast('No se pueden registrar tareas con fecha anterior al día de hoy (19 de Octubre de 2026).', 'error');
+    return;
+  }
+
+  if (!isValidAppDate(dueDate, false)) {
+    showToast('Fecha de vencimiento no válida. El año debe tener 4 dígitos y encontrarse entre hoy (19/10/2026) y 31/12/2027.', 'error');
     return;
   }
 
@@ -1062,13 +1124,11 @@ function openPayModal(debtId) {
   document.getElementById('payDebtConcept').textContent = debt.concept;
   document.getElementById('payDebtAmount').textContent = `${debt.currency || 'S/'} ${formatMoney(debt.amount)}`;
 
-  const now = new Date();
-  const localIsoDate = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
   const inpPayDate = document.getElementById('inpPayDate');
   if (inpPayDate) {
-    inpPayDate.min = `${MIN_ALLOWED_DATE}T00:00`;
-    inpPayDate.max = `${MAX_ALLOWED_DATE}T23:59`;
-    inpPayDate.value = localIsoDate;
+    inpPayDate.min = MIN_PAY_DATE;
+    inpPayDate.max = MAX_PAY_DATE;
+    inpPayDate.value = '2026-10-19T12:00';
   }
   document.getElementById('inpTransferRef').value = `OP-${Date.now().toString().slice(-6)}`;
   document.getElementById('inpCashVoucher').value = `REC-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -1165,8 +1225,13 @@ async function handleExecutePayment(e) {
   const payDate = document.getElementById('inpPayDate').value;
   const notes = document.getElementById('inpPaymentNotes').value.trim();
 
-  if (payDate && !isValidAppDate(payDate, true)) {
-    showToast('Fecha de pago no válida. El año debe tener 4 dígitos y encontrarse entre Setiembre 2026 y Diciembre 2027.', 'error');
+  if (!payDate || !isValidAppDate(payDate, true)) {
+    showToast('Fecha de pago inválida. Solo se pueden registrar pagos con fecha de hoy (19 de Octubre de 2026).', 'error');
+    return;
+  }
+
+  if (notes.length > 250) {
+    showToast('Las observaciones no pueden exceder 250 caracteres.', 'error');
     return;
   }
 
@@ -1174,13 +1239,23 @@ async function handleExecutePayment(e) {
   let transactionRef = '';
 
   if (method === 'Efectivo') {
-    const voucher = document.getElementById('inpCashVoucher').value.trim();
-    const custodian = document.getElementById('inpCashCustodian').value.trim() || 'Caja Chica Administración';
+    const voucher = (document.getElementById('inpCashVoucher')?.value || '').trim();
+    const custodian = (document.getElementById('inpCashCustodian')?.value || '').trim() || 'Caja Chica Administración';
     const receiverRole = document.getElementById('inpCashReceiverRole')?.value || 'Cobrador / Proveedor';
-    const receiverDetail = document.getElementById('inpCashReceiver')?.value.trim();
+    const receiverDetail = (document.getElementById('inpCashReceiver')?.value || '').trim();
 
-    if (!voucher) {
-      showToast('Por favor ingresa el N° de recibo del pago.', 'error');
+    if (!voucher || voucher.length < 2 || voucher.length > 30) {
+      showToast('Por favor ingresa un N° de recibo válido (entre 2 y 30 caracteres).', 'error');
+      return;
+    }
+
+    if (custodian.length < 3 || custodian.length > 60) {
+      showToast('El custodio de caja debe tener entre 3 y 60 caracteres.', 'error');
+      return;
+    }
+
+    if (receiverDetail && receiverDetail.length > 100) {
+      showToast('El nombre de quien recibe no puede exceder 100 caracteres.', 'error');
       return;
     }
 
@@ -1195,7 +1270,12 @@ async function handleExecutePayment(e) {
     };
     transactionRef = voucher;
   } else {
-    transactionRef = document.getElementById('inpTransferRef').value.trim() || 'TRANSF-BCP';
+    const rawRef = (document.getElementById('inpTransferRef')?.value || '').trim();
+    if (!rawRef || rawRef.length < 3 || rawRef.length > 50) {
+      showToast('El N° de operación / referencia debe tener entre 3 y 50 caracteres.', 'error');
+      return;
+    }
+    transactionRef = rawRef;
   }
 
   const payload = {
@@ -1268,10 +1348,10 @@ async function handleConfirmManagerAssume(e) {
   e.preventDefault();
 
   const debtId = document.getElementById('assumeDebtId').value;
-  const reason = document.getElementById('inpManagerReason').value.trim();
+  const reason = (document.getElementById('inpManagerReason')?.value || '').trim();
 
-  if (!reason) {
-    showToast('Indica la justificación o motivo de la excepción.', 'error');
+  if (!reason || reason.length < 5 || reason.length > 300) {
+    showToast('Indica la justificación o motivo de la excepción (entre 5 y 300 caracteres).', 'error');
     return;
   }
 

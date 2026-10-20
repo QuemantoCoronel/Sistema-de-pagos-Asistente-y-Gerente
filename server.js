@@ -221,17 +221,37 @@ const server = http.createServer(async (req, res) => {
       // POST /api/debts (Crear nueva tarea de pago - Asistente)
       if (pathname === '/api/debts' && method === 'POST') {
         const body = await parseBody(req);
-        if (!body.provider || !body.amount || !body.dueDate) {
+        if (!body.provider || body.amount === undefined || !body.dueDate) {
           return sendJson(res, 400, { success: false, message: 'Proveedor, importe y fecha de vencimiento son obligatorios.' });
         }
+
+        const provider = String(body.provider).trim();
+        if (provider.length < 3 || provider.length > 100) {
+          return sendJson(res, 400, { success: false, message: 'El nombre del proveedor debe tener entre 3 y 100 caracteres.' });
+        }
+        if (!/^[a-zA-Z0-9áéíóúÁÉÍÓÚñÑüÜ\s\.,&'\-\(\)]+$/.test(provider)) {
+          return sendJson(res, 400, { success: false, message: 'El nombre del proveedor contiene caracteres no permitidos.' });
+        }
+
+        const amount = parseFloat(body.amount);
+        if (isNaN(amount) || amount < 0.10 || amount > 1000000.00) {
+          return sendJson(res, 400, { success: false, message: 'El importe debe ser un número válido entre S/ 0.10 y S/ 1,000,000.00.' });
+        }
+
+        const concept = body.concept ? String(body.concept).trim().substring(0, 200) : 'Pago programado';
+        const recurringCategory = body.recurringCategory ? String(body.recurringCategory).trim().substring(0, 60) : null;
 
         const dueMatch = String(body.dueDate).match(/^(\d{4})-(\d{2})-(\d{2})$/);
         if (!dueMatch) {
           return sendJson(res, 400, { success: false, message: 'La fecha de vencimiento debe tener formato AAAA-MM-DD con año de 4 dígitos.' });
         }
         const dueYear = parseInt(dueMatch[1], 10);
-        if (dueYear < 2026 || dueYear > 2027 || body.dueDate < '2026-09-01' || body.dueDate > '2027-12-31') {
-          return sendJson(res, 400, { success: false, message: 'Fecha de vencimiento no permitida. El rango válido es de Setiembre 2026 a Diciembre 2027.' });
+        // CRITICAL REQUIREMENT: Prohibido crear nada con fecha anterior a hoy (19 de Octubre de 2026) ni posterior a 2027
+        if (dueYear < 2026 || dueYear > 2027 || body.dueDate < '2026-10-19' || body.dueDate > '2027-12-31') {
+          return sendJson(res, 400, {
+            success: false,
+            message: 'Fecha no permitida. No se pueden crear pagos o tareas con fecha anterior al día de hoy (19 de Octubre de 2026) ni posteriores a 2027.'
+          });
         }
 
         const debts = readDebts();
@@ -239,22 +259,22 @@ const server = http.createServer(async (req, res) => {
 
         const newDebt = {
           id: newId,
-          provider: body.provider.trim(),
-          concept: body.concept ? body.concept.trim() : 'Pago programado',
+          provider: provider,
+          concept: concept,
           category: body.category || 'Varios',
-          amount: parseFloat(body.amount),
-          currency: body.currency || 'PEN',
+          amount: Math.round(amount * 100) / 100,
+          currency: (body.currency === 'USD' ? 'USD' : 'PEN'),
           dueDate: body.dueDate,
-          priority: body.priority || 'Media',
+          priority: ['Alta', 'Media', 'Baja'].includes(body.priority) ? body.priority : 'Media',
           status: 'Pendiente',
           isRecurring: !!body.isRecurring,
-          recurringCategory: body.recurringCategory || null,
+          recurringCategory: recurringCategory,
           assignedTo: 'Asistente',
           managerAssumed: false,
           managerAssumptionReason: '',
           receipts: Array.isArray(body.receipts) ? body.receipts : [],
           payment: null,
-          createdAt: new Date().toISOString().substring(0, 10)
+          createdAt: '2026-10-19'
         };
 
         debts.push(newDebt);
@@ -277,16 +297,14 @@ const server = http.createServer(async (req, res) => {
           });
         }
 
-        if (body.paidDate) {
-          const pDateOnly = String(body.paidDate).split('T')[0];
-          const pMatch = pDateOnly.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-          if (!pMatch) {
-            return sendJson(res, 400, { success: false, message: 'La fecha de pago debe tener año de 4 dígitos.' });
-          }
-          const pYear = parseInt(pMatch[1], 10);
-          if (pYear < 2026 || pYear > 2027 || pDateOnly < '2026-09-01' || pDateOnly > '2027-12-31') {
-            return sendJson(res, 400, { success: false, message: 'Fecha de pago fuera de rango permitido (Setiembre 2026 a Diciembre 2027).' });
-          }
+        // CRITICAL REQUIREMENT: Pagos solo con fecha de hoy (19 de Octubre de 2026)
+        const pDateOnly = body.paidDate ? String(body.paidDate).split('T')[0] : '2026-10-19';
+        const pMatch = pDateOnly.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!pMatch || pDateOnly !== '2026-10-19') {
+          return sendJson(res, 400, {
+            success: false,
+            message: 'Fecha de pago no permitida. Los pagos solo pueden registrarse con la fecha de hoy (19 de Octubre de 2026).'
+          });
         }
 
         const debts = readDebts();
@@ -295,28 +313,44 @@ const server = http.createServer(async (req, res) => {
           return sendJson(res, 404, { success: false, message: 'Deuda no encontrada.' });
         }
 
-        const methodType = body.method || 'Transferencia';
+        const methodType = body.method === 'Efectivo' ? 'Efectivo' : 'Transferencia';
 
         // Cash payment control
         let cashControl = null;
+        let transactionRef = '';
         if (methodType === 'Efectivo') {
+          const voucher = (body.cashVoucherNumber || '').trim();
+          if (voucher.length < 2 || voucher.length > 30) {
+            return sendJson(res, 400, { success: false, message: 'El N° de recibo de caja debe tener entre 2 y 30 caracteres.' });
+          }
+          const custodian = (body.cashCustodian || 'Caja Chica Administración').trim().substring(0, 60);
+          const receivedBy = (body.receivedBy || 'Personal de cobranza / Proveedor').trim().substring(0, 100);
+
           cashControl = {
-            cashVoucherNumber: body.cashVoucherNumber || `VALE-${Date.now().toString().slice(-4)}`,
-            cashCustodian: body.cashCustodian || 'Caja Chica Administración',
-            receivedBy: body.receivedBy || 'Personal de cobranza / Proveedor',
-            cashNotes: body.cashNotes || 'Pago liquidado en efectivo.'
+            cashVoucherNumber: voucher,
+            cashCustodian: custodian,
+            receivedBy: receivedBy,
+            cashNotes: 'Pago liquidado en efectivo con registro de recibo.'
           };
+          transactionRef = voucher;
+        } else {
+          transactionRef = (body.transactionRef || '').trim().substring(0, 50);
+          if (transactionRef.length < 3) {
+            return sendJson(res, 400, { success: false, message: 'El N° de operación bancaria debe tener al menos 3 caracteres.' });
+          }
         }
+
+        const notes = (body.notes || '').trim().substring(0, 250);
 
         debts[index].status = 'Pagado';
         debts[index].payment = {
-          paidDate: body.paidDate || new Date().toISOString(),
+          paidDate: body.paidDate || '2026-10-19T12:00',
           paidBy: body.paidBy || 'Ana Torres (Asistente Contable)',
           method: methodType,
-          transactionRef: body.transactionRef || (methodType === 'Efectivo' ? cashControl.cashVoucherNumber : 'OPER-TRANSF'),
+          transactionRef: transactionRef,
           proofFile: body.proofFile,
           cashControl: cashControl,
-          notes: body.notes || ''
+          notes: notes
         };
 
         writeDebts(debts);
@@ -329,6 +363,14 @@ const server = http.createServer(async (req, res) => {
         const debtId = decodeURIComponent(assumeMatch[1]);
         const body = await parseBody(req);
 
+        const reason = (body.reason || '').trim();
+        if (reason.length < 5 || reason.length > 300) {
+          return sendJson(res, 400, {
+            success: false,
+            message: 'La justificación de gerencia debe tener entre 5 y 300 caracteres.'
+          });
+        }
+
         const debts = readDebts();
         const index = debts.findIndex(d => d.id === debtId);
         if (index === -1) {
@@ -337,7 +379,7 @@ const server = http.createServer(async (req, res) => {
 
         debts[index].assignedTo = 'Gerente';
         debts[index].managerAssumed = true;
-        debts[index].managerAssumptionReason = body.reason || 'Asumido directamente por Gerencia General.';
+        debts[index].managerAssumptionReason = reason;
 
         writeDebts(debts);
         return sendJson(res, 200, {
@@ -351,8 +393,11 @@ const server = http.createServer(async (req, res) => {
       if (pathname === '/api/debts/recurring/generate' && method === 'POST') {
         const body = await parseBody(req);
         const targetMonth = body.targetMonth; // e.g. "2026-11"
-        if (!targetMonth) {
-          return sendJson(res, 400, { success: false, message: 'targetMonth (YYYY-MM) es requerido.' });
+        if (!targetMonth || !targetMonth.match(/^(\d{4})-(\d{2})$/)) {
+          return sendJson(res, 400, { success: false, message: 'targetMonth (YYYY-MM) es inválido.' });
+        }
+        if (targetMonth < '2026-10' || targetMonth > '2027-12') {
+          return sendJson(res, 400, { success: false, message: 'El mes para generación recurrente debe estar entre 2026-10 y 2027-12.' });
         }
 
         const debts = readDebts();
