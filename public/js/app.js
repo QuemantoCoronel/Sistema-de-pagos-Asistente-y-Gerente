@@ -275,6 +275,16 @@ function setupEventListeners() {
       }
     });
   });
+
+  // Draft persistence for new debt modal (D03)
+  const formNewDebt = document.getElementById('formNewDebt');
+  if (formNewDebt) {
+    ['input', 'change'].forEach(evt => {
+      formNewDebt.addEventListener(evt, () => {
+        saveNewDebtDraft();
+      });
+    });
+  }
 }
 
 function setupDropzone(dropzoneId, inputId, onSelectFn) {
@@ -466,18 +476,32 @@ function updateDateHelperTexts() {
 }
 
 function validateAmountInput(input) {
-  if (!input || input.value === '') return;
-  let val = parseFloat(input.value);
-  if (isNaN(val)) {
-    input.value = '';
+  if (!input || input.value === '') {
+    input.classList.remove('input-error');
     return;
   }
-  if (val < 0) {
-    input.value = '0.10';
-    showToast('El importe no puede ser negativo.', 'error');
-  } else if (val > 1000000) {
-    input.value = '1000000.00';
-    showToast('El importe máximo permitido es S/ 1,000,000.00.', 'error');
+  const val = parseFloat(input.value);
+  if (isNaN(val) || val < 0.10 || val > 1000000.00) {
+    input.classList.add('input-error');
+  } else {
+    input.classList.remove('input-error');
+  }
+}
+
+function checkAmountOnBlur(input) {
+  if (!input || input.value === '') {
+    input.classList.remove('input-error');
+    return;
+  }
+  const val = parseFloat(input.value);
+  if (isNaN(val) || val < 0.10) {
+    input.classList.add('input-error');
+    showToast('El importe mínimo permitido es S/ 0.10. Por favor corrige el valor.', 'error');
+  } else if (val > 1000000.00) {
+    input.classList.add('input-error');
+    showToast('El importe no puede superar S/ 1,000,000.00. Se conservó lo que escribiste para que lo corrijas.', 'error');
+  } else {
+    input.classList.remove('input-error');
   }
 }
 
@@ -494,7 +518,10 @@ function validateYearDigits(input, isDateTime = false) {
 }
 
 function enforceDateBounds(input, isDateTime = false) {
-  if (!input || !input.value) return;
+  if (!input || !input.value) {
+    input.classList.remove('input-error');
+    return;
+  }
   const val = input.value;
   const dateOnly = isDateTime ? val.split('T')[0] : val;
   const parts = dateOnly.split('-');
@@ -508,26 +535,30 @@ function enforceDateBounds(input, isDateTime = false) {
 
   const year = parseInt(parts[0], 10);
   if (isNaN(year) || parts[0].length !== 4 || year < 2026 || year > 2027) {
+    input.classList.add('input-error');
     showToast('Año no válido. El año debe tener exactamente 4 dígitos (2026 o 2027).', 'error');
-    input.value = isDateTime ? getNowIsoLocal() : todayStr;
     return;
   }
   
   if (isDateTime) {
     if (val < minPay) {
+      input.classList.add('input-error');
       showToast(`No se pueden registrar pagos con fecha anterior a hoy (${todayFormatted}).`, 'error');
-      input.value = minPay;
     } else if (val > maxPay) {
+      input.classList.add('input-error');
       showToast('No se pueden registrar pagos en fechas futuras.', 'error');
-      input.value = maxPay;
+    } else {
+      input.classList.remove('input-error');
     }
   } else {
     if (val < todayStr) {
+      input.classList.add('input-error');
       showToast(`No se pueden crear tareas con fecha de vencimiento anterior al día de hoy (${todayFormatted}).`, 'error');
-      input.value = todayStr;
     } else if (val > MAX_CREATION_DATE) {
+      input.classList.add('input-error');
       showToast('La fecha de vencimiento no puede exceder Diciembre de 2027.', 'error');
-      input.value = MAX_CREATION_DATE;
+    } else {
+      input.classList.remove('input-error');
     }
   }
 }
@@ -700,6 +731,19 @@ function applyFiltersAndRender() {
   updateSummaryKPIs();
 }
 
+function clearAllFilters() {
+  const s = document.getElementById('searchDebts');
+  if (s) s.value = '';
+  const st = document.getElementById('filterStatus');
+  if (st) st.value = 'all';
+  const cat = document.getElementById('filterCategory');
+  if (cat) cat.value = 'all';
+  const pri = document.getElementById('filterPriority');
+  if (pri) pri.value = 'all';
+  applyFiltersAndRender();
+  showToast('Filtros de búsqueda restablecidos.', 'info');
+}
+
 // ==========================================================================
 // RENDER 1: POST-IT GRID VIEW (VISTA PRINCIPAL DE NOTAS ADHESIVAS)
 // ==========================================================================
@@ -711,7 +755,22 @@ function renderPostits() {
   grid.innerHTML = '';
 
   if (state.filteredDebts.length === 0) {
-    if (emptyState) emptyState.style.display = 'block';
+    if (emptyState) {
+      emptyState.style.display = 'block';
+      const titleEl = document.getElementById('emptyStateTitle');
+      const subEl = document.getElementById('emptyStateSubtitle');
+      const actionEl = document.getElementById('emptyStateAction');
+
+      if (state.debts.length > 0) {
+        if (titleEl) titleEl.textContent = 'No se encontraron resultados para los filtros seleccionados';
+        if (subEl) subEl.textContent = 'Existen obligaciones registradas en este periodo, pero ninguna coincide con tu búsqueda o filtros actuales.';
+        if (actionEl) actionEl.style.display = 'block';
+      } else {
+        if (titleEl) titleEl.textContent = 'No hay deudas registradas para este periodo';
+        if (subEl) subEl.textContent = 'Usa el botón "+ Nueva Tarea de Pago" o navega a otro mes.';
+        if (actionEl) actionEl.style.display = 'none';
+      }
+    }
     return;
   }
   if (emptyState) emptyState.style.display = 'none';
@@ -726,24 +785,31 @@ function renderPostits() {
     const card = document.createElement('div');
     card.className = `postit-card ${alert.postitClass}`;
     card.id = `postit-${d.id}`;
+    card.style.cursor = 'pointer';
+    card.title = 'Clic para ver expediente contable (Boleta y Comprobante)';
+    card.onclick = (e) => {
+      // Don't trigger dual viewer if clicking direct action buttons
+      if (e.target.closest('button') || e.target.closest('a')) return;
+      openDualDocumentViewer(d.id);
+    };
 
-    // Receipts tag
+    // Receipts tag (Boleta por pagar)
     const receiptCount = d.receipts ? d.receipts.length : 0;
     let receiptBtn = '';
     if (receiptCount > 0) {
       receiptBtn = `
-        <button type="button" class="doc-btn has-doc" onclick="viewReceipts('${d.id}')" title="Ver recibo / factura adjunta">
+        <button type="button" class="doc-btn has-doc" onclick="openDualDocumentViewer('${d.id}')" title="Ver boleta o recibo de cobro original">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          Recibo (${receiptCount})
+          Boleta (${receiptCount})
         </button>
       `;
     }
 
-    // Payment proof button
+    // Payment proof button (Comprobante de desembolso)
     let proofBtn = '';
     if (isPaid && d.payment?.proofFile) {
       proofBtn = `
-        <button type="button" class="doc-btn has-proof" onclick="viewPaymentProof('${d.id}')" title="Ver comprobante de pago verificado">
+        <button type="button" class="doc-btn has-proof" onclick="openDualDocumentViewer('${d.id}')" title="Ver comprobante de pago emitido">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
           Comprobante
         </button>
@@ -754,8 +820,15 @@ function renderPostits() {
     let actionBtnHtml = '';
     if (isPaid) {
       actionBtnHtml = `
-        <div style="display: flex; align-items: center; gap: 6px;">
-          ${proofBtn}
+        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 6px; flex-wrap: wrap;">
+          <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+            ${receiptBtn}
+            ${proofBtn}
+          </div>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="openDualDocumentViewer('${d.id}')" title="Ver boleta de cobro y comprobante de pago simultáneamente">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            Ver Cobro y Pago
+          </button>
           <div class="stamp-paid-badge">PAGADO ✓</div>
         </div>
       `;
@@ -764,23 +837,27 @@ function renderPostits() {
         if (d.managerAssumed) {
           // Assistant sees button indicating it is managed by manager
           actionBtnHtml = `
-            <div style="display: flex; align-items: center; gap: 6px;">
-              ${receiptBtn}
-              <button type="button" class="btn btn-secondary btn-sm" style="border-color: #6366f1; color: #6366f1; background: rgba(99, 102, 241, 0.1);" onclick="viewManagerAssumedInfo('${d.id}')" title="El gerente general se encargará directamente de este pago">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                Gestionado por el gerente
-              </button>
+            <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 6px; flex-wrap: wrap;">
+              <div style="display: flex; align-items: center; gap: 6px;">
+                ${receiptBtn}
+                <button type="button" class="btn btn-secondary btn-sm" style="border-color: #6366f1; color: #6366f1; background: rgba(99, 102, 241, 0.1);" onclick="viewManagerAssumedInfo('${d.id}')" title="El gerente general se encargará directamente de este pago">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                  Gestionado por el gerente
+                </button>
+              </div>
             </div>
           `;
         } else {
           // Normal Assistant can pay
           actionBtnHtml = `
-            <div style="display: flex; align-items: center; gap: 6px;">
-              ${receiptBtn}
-              <button type="button" class="btn btn-success btn-sm" onclick="openPayModal('${d.id}')" title="Pagar con comprobante obligatorio">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-                Pagar
-              </button>
+            <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 6px; flex-wrap: wrap;">
+              <div style="display: flex; align-items: center; gap: 6px;">
+                ${receiptBtn}
+                <button type="button" class="btn btn-success btn-sm" onclick="openPayModal('${d.id}')" title="Pagar con comprobante obligatorio">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                  Pagar
+                </button>
+              </div>
             </div>
           `;
         }
@@ -788,21 +865,25 @@ function renderPostits() {
         // Manager view
         if (!d.managerAssumed) {
           actionBtnHtml = `
-            <div style="display: flex; align-items: center; gap: 6px;">
-              ${receiptBtn}
-              <button type="button" class="btn btn-secondary btn-sm" style="border-color: #6366f1; color: #6366f1;" onclick="openManagerAssumeModal('${d.id}')" title="Excepción: El gerente asume realizar este pago">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                Asumir Pago
-              </button>
+            <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 6px; flex-wrap: wrap;">
+              <div style="display: flex; align-items: center; gap: 6px;">
+                ${receiptBtn}
+                <button type="button" class="btn btn-secondary btn-sm" style="border-color: #6366f1; color: #6366f1;" onclick="openManagerAssumeModal('${d.id}')" title="Excepción: El gerente asume realizar este pago">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                  Asumir Pago
+                </button>
+              </div>
             </div>
           `;
         } else {
           actionBtnHtml = `
-            <div style="display: flex; align-items: center; gap: 6px;">
-              ${receiptBtn}
-              <button type="button" class="btn btn-secondary btn-sm" style="border-color: #6366f1; color: #6366f1; background: rgba(99, 102, 241, 0.1);" onclick="viewManagerAssumedInfo('${d.id}')" title="Ver detalles de la gestión de gerencia">
-                Gestionando
-              </button>
+            <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 6px; flex-wrap: wrap;">
+              <div style="display: flex; align-items: center; gap: 6px;">
+                ${receiptBtn}
+                <button type="button" class="btn btn-secondary btn-sm" style="border-color: #6366f1; color: #6366f1; background: rgba(99, 102, 241, 0.1);" onclick="viewManagerAssumedInfo('${d.id}')" title="Ver detalles de la gestión de gerencia">
+                  Gestionando
+                </button>
+              </div>
             </div>
           `;
         }
@@ -1066,8 +1147,82 @@ function updateSummaryKPIs() {
 }
 
 // ==========================================================================
+// ==========================================================================
 // MODALS LOGIC (NEW DEBT, PAY DEBT, MANAGER ASSUME, DOC VIEWER, RECURRING)
 // ==========================================================================
+function saveNewDebtDraft() {
+  try {
+    const provider = document.getElementById('inpProvider')?.value || '';
+    const concept = document.getElementById('inpConcept')?.value || '';
+    const amount = document.getElementById('inpAmount')?.value || '';
+    const dueDate = document.getElementById('inpDueDate')?.value || '';
+    const priority = document.getElementById('inpPriority')?.value || 'Media';
+    const category = document.getElementById('inpCategory')?.value || 'Servicios Básicos';
+    const isRecurring = document.getElementById('inpIsRecurring')?.checked || false;
+    const recurringCategory = document.getElementById('inpRecurringCategory')?.value || '';
+
+    // Only save if at least one field has content
+    if (provider || concept || amount || (dueDate && dueDate !== getTodayStr())) {
+      const draft = { provider, concept, amount, dueDate, priority, category, isRecurring, recurringCategory };
+      sessionStorage.setItem('paycontrol_new_debt_draft', JSON.stringify(draft));
+    }
+  } catch (e) {
+    // Ignore storage issues
+  }
+}
+
+function restoreNewDebtDraft() {
+  try {
+    const saved = sessionStorage.getItem('paycontrol_new_debt_draft');
+    if (!saved) {
+      const defaultVal = `${state.currentMonth}-25`;
+      const todayStr = getTodayStr();
+      const inpDueDate = document.getElementById('inpDueDate');
+      if (inpDueDate && !inpDueDate.value) {
+        inpDueDate.value = defaultVal < todayStr ? todayStr : defaultVal;
+      }
+      const banner = document.getElementById('draftRestoredAlert');
+      if (banner) banner.style.display = 'none';
+      return;
+    }
+
+    const draft = JSON.parse(saved);
+    if (draft.provider) document.getElementById('inpProvider').value = draft.provider;
+    if (draft.concept) document.getElementById('inpConcept').value = draft.concept;
+    if (draft.amount) document.getElementById('inpAmount').value = draft.amount;
+    if (draft.dueDate) document.getElementById('inpDueDate').value = draft.dueDate;
+    if (draft.priority) document.getElementById('inpPriority').value = draft.priority;
+    if (draft.category) document.getElementById('inpCategory').value = draft.category;
+    if (draft.isRecurring) {
+      document.getElementById('inpIsRecurring').checked = true;
+      toggleRecurringOptions(true);
+      if (draft.recurringCategory) document.getElementById('inpRecurringCategory').value = draft.recurringCategory;
+    }
+
+    const banner = document.getElementById('draftRestoredAlert');
+    if (banner) banner.style.display = 'flex';
+  } catch (e) {
+    console.error('Error restoring draft', e);
+  }
+}
+
+function discardNewDebtDraft() {
+  try {
+    sessionStorage.removeItem('paycontrol_new_debt_draft');
+  } catch (e) {}
+  document.getElementById('formNewDebt').reset();
+  const banner = document.getElementById('draftRestoredAlert');
+  if (banner) banner.style.display = 'none';
+  const defaultVal = `${state.currentMonth}-25`;
+  const todayStr = getTodayStr();
+  const inpDueDate = document.getElementById('inpDueDate');
+  if (inpDueDate) {
+    inpDueDate.value = defaultVal < todayStr ? todayStr : defaultVal;
+  }
+  document.querySelectorAll('#formNewDebt .input-error').forEach(el => el.classList.remove('input-error'));
+  showToast('Borrador descartado.', 'info');
+}
+
 function openNewDebtModal() {
   if (state.currentUser?.role !== 'asistente') {
     showToast('Solo el asistente contable puede crear tareas de pago.', 'error');
@@ -1081,14 +1236,16 @@ function openNewDebtModal() {
   if (inpDueDate) {
     inpDueDate.min = todayStr;
     inpDueDate.max = MAX_CREATION_DATE;
-    const defaultVal = `${state.currentMonth}-25`;
-    inpDueDate.value = defaultVal < todayStr ? todayStr : defaultVal;
   }
 
   state.selectedReceiptFile = null;
   document.getElementById('receiptPreviewContainer').innerHTML = '';
   document.getElementById('formNewDebt').reset();
   document.getElementById('groupRecurringCategory').style.display = 'none';
+  document.querySelectorAll('#formNewDebt .input-error').forEach(el => el.classList.remove('input-error'));
+
+  // Restore draft if user was previously editing (D03)
+  restoreNewDebtDraft();
 
   openModal('modalNewDebt');
 }
@@ -1150,32 +1307,45 @@ async function handleCreateDebt(e) {
   }
 
   if (provider.length < 3 || provider.length > 100) {
+    document.getElementById('inpProvider').classList.add('input-error');
+    document.getElementById('inpProvider').focus();
     showToast('El nombre del proveedor debe tener entre 3 y 100 caracteres.', 'error');
     return;
   }
+  document.getElementById('inpProvider').classList.remove('input-error');
 
   if (!/[a-zA-Z0-9]/.test(provider)) {
+    document.getElementById('inpProvider').classList.add('input-error');
+    document.getElementById('inpProvider').focus();
     showToast('El nombre del proveedor debe contener letras o números válidos.', 'error');
     return;
   }
 
   if (amount < 0.10 || amount > 1000000.00) {
+    document.getElementById('inpAmount').classList.add('input-error');
+    document.getElementById('inpAmount').focus();
     showToast('El importe debe ser un monto válido entre S/ 0.10 y S/ 1,000,000.00.', 'error');
     return;
   }
+  document.getElementById('inpAmount').classList.remove('input-error');
 
   const todayStr = getTodayStr();
   const todayFormatted = getTodayFormattedDMY();
 
   if (dueDate < todayStr) {
+    document.getElementById('inpDueDate').classList.add('input-error');
+    document.getElementById('inpDueDate').focus();
     showToast(`No se pueden registrar tareas con fecha anterior al día de hoy (${todayFormatted}).`, 'error');
     return;
   }
 
   if (!isValidAppDate(dueDate, false)) {
+    document.getElementById('inpDueDate').classList.add('input-error');
+    document.getElementById('inpDueDate').focus();
     showToast(`Fecha de vencimiento no válida. El año debe tener 4 dígitos y encontrarse entre hoy (${todayFormatted}) y 31/12/2027.`, 'error');
     return;
   }
+  document.getElementById('inpDueDate').classList.remove('input-error');
 
   const receipts = [];
   if (state.selectedReceiptFile) {
@@ -1210,6 +1380,12 @@ async function handleCreateDebt(e) {
     });
 
     if (res.ok) {
+      try {
+        sessionStorage.removeItem('paycontrol_new_debt_draft');
+      } catch (e) {}
+      const banner = document.getElementById('draftRestoredAlert');
+      if (banner) banner.style.display = 'none';
+
       showToast('Tarea de pago creada exitosamente.', 'success');
       closeModal('modalNewDebt');
       loadData();
@@ -1217,6 +1393,12 @@ async function handleCreateDebt(e) {
       throw new Error();
     }
   } catch {
+    try {
+      sessionStorage.removeItem('paycontrol_new_debt_draft');
+    } catch (e) {}
+    const banner = document.getElementById('draftRestoredAlert');
+    if (banner) banner.style.display = 'none';
+
     const newId = 'PAY-' + dueDate.replace(/-/g, '').substring(0, 6) + '-' + String(state.debts.length + 1).padStart(3, '0');
     state.debts.push({
       id: newId,
@@ -1526,92 +1708,242 @@ function viewManagerAssumedInfo(debtId) {
 }
 
 // ==========================================================================
-// MODAL 4: VISOR DE DOCUMENTOS
+// MODAL 4: VISOR DE DOCUMENTOS Y AUDITORÍA CONTABLE (BOLETA VS COMPROBANTE)
 // ==========================================================================
-function viewReceipts(debtId) {
+function openDualDocumentViewer(debtId) {
   const debt = state.debts.find(d => d.id === debtId);
-  if (!debt || !debt.receipts || debt.receipts.length === 0) {
-    showToast('Esta deuda no tiene recibos adjuntos.', 'info');
-    return;
+  if (!debt) return;
+
+  const isPaid = debt.status === 'Pagado';
+  const hasReceipt = debt.receipts && debt.receipts.length > 0;
+  const receipt = hasReceipt ? debt.receipts[0] : null;
+  const hasProof = isPaid && debt.payment && debt.payment.proofFile;
+  const proof = hasProof ? debt.payment.proofFile : null;
+  const isGerente = state.currentUser?.role === 'gerente';
+  const isCash = isPaid && debt.payment?.method === 'Efectivo';
+
+  // Modal Title
+  const titleEl = document.getElementById('viewerTitle');
+  if (titleEl) {
+    titleEl.innerHTML = `
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      Auditoría Documentaria: Boleta por Pagar vs Comprobante de Pago
+    `;
   }
 
-  const rec = debt.receipts[0];
-  displayDocumentViewer({
-    title: `Recibo / Factura - ${debt.provider}`,
-    fileName: rec.name,
-    fileUrl: rec.url,
-    fileType: rec.type,
-    meta: `Subido por Asistente &bull; ${rec.size || 'Documento oficial'}`,
-    extraDetails: `
-      <strong>Proveedor:</strong> ${escapeHtml(debt.provider)} &bull;
-      <strong>Importe:</strong> S/ ${formatMoney(debt.amount)} &bull;
-      <strong>Concepto:</strong> ${escapeHtml(debt.concept)}
-    `
-  });
+  // Left Column (Cobro / Boleta) HTML
+  let leftColHtml = '';
+  if (hasReceipt && receipt) {
+    const isPdf = (receipt.type && receipt.type.includes('pdf')) || (receipt.url && receipt.url.endsWith('.pdf'));
+    leftColHtml = `
+      <div class="dual-viewer-col">
+        <div class="dual-viewer-col-header">
+          <span class="dual-viewer-col-title" style="color: #3b82f6;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            1. Boleta / Factura por Pagar (Cobro Original)
+          </span>
+          <a href="${receipt.url}" target="_blank" download="${escapeHtml(receipt.name)}" class="btn btn-secondary btn-sm" style="padding: 3px 10px; font-size: 0.74rem;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Descargar
+          </a>
+        </div>
+        <div class="dual-viewer-frame-box">
+          ${isPdf ? `
+            <iframe src="${receipt.url}" title="${escapeHtml(receipt.name)}"></iframe>
+          ` : `
+            <img src="${receipt.url}" alt="${escapeHtml(receipt.name)}">
+          `}
+        </div>
+        <div class="dual-viewer-audit-meta">
+          <strong>Archivo:</strong> ${escapeHtml(receipt.name)} <span style="color: var(--text-muted);">(${receipt.size || 'Archivo original'})</span><br>
+          <strong>Fecha Recepción:</strong> ${receipt.uploadDate || debt.createdAt || '-'}<br>
+          <strong>Importe a Cobrar:</strong> <span style="font-weight: 700; color: var(--accent-primary);">${debt.currency || 'S/'} ${formatMoney(debt.amount)}</span>
+        </div>
+      </div>
+    `;
+  } else {
+    leftColHtml = `
+      <div class="dual-viewer-col">
+        <div class="dual-viewer-col-header">
+          <span class="dual-viewer-col-title" style="color: var(--text-heading);">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            1. Boleta / Factura por Pagar (Cobro Original)
+          </span>
+          <span class="badge-pill" style="background: rgba(148, 163, 184, 0.15); color: var(--text-muted); font-size: 0.72rem;">Sin archivo digital</span>
+        </div>
+        <div class="dual-viewer-empty-box">
+          <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: var(--text-dim); margin-bottom: 12px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <strong style="color: var(--text-heading); font-size: 0.96rem;">Sin Documento Digital Adjunto</strong>
+          <p style="font-size: 0.82rem; color: var(--text-muted); margin-top: 8px; max-width: 320px; line-height: 1.4;">
+            Esta obligación se registró con digitación directa sin adjuntar archivo físico/PDF.<br>
+            Importe fijado: <strong style="color: var(--accent-primary);">${debt.currency || 'S/'} ${formatMoney(debt.amount)}</strong>.
+          </p>
+        </div>
+        <div class="dual-viewer-audit-meta">
+          <strong>Registro contable:</strong> Creado por Asistente Contable<br>
+          <strong>Fecha Registro:</strong> ${debt.createdAt || '-'}<br>
+          <strong>Importe a Cobrar:</strong> <span style="font-weight: 700; color: var(--accent-primary);">${debt.currency || 'S/'} ${formatMoney(debt.amount)}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  // Right Column (Pago / Comprobante) HTML
+  let rightColHtml = '';
+  if (isPaid && proof) {
+    const isPdf = (proof.type && proof.type.includes('pdf')) || (proof.url && proof.url.endsWith('.pdf'));
+    const p = debt.payment;
+    rightColHtml = `
+      <div class="dual-viewer-col">
+        <div class="dual-viewer-col-header">
+          <span class="dual-viewer-col-title" style="color: #10b981;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            2. Comprobante de Pago Liquidado (Desembolso)
+          </span>
+          <a href="${proof.url || proof.dataUrl}" target="_blank" download="${escapeHtml(proof.name)}" class="btn btn-secondary btn-sm" style="padding: 3px 10px; font-size: 0.74rem;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Descargar
+          </a>
+        </div>
+        <div class="dual-viewer-frame-box">
+          ${isPdf ? `
+            <iframe src="${proof.url || proof.dataUrl}" title="${escapeHtml(proof.name)}"></iframe>
+          ` : `
+            <img src="${proof.url || proof.dataUrl}" alt="${escapeHtml(proof.name)}">
+          `}
+        </div>
+        <div class="dual-viewer-audit-meta" style="background: rgba(16, 185, 129, 0.08); border-color: rgba(16, 185, 129, 0.3);">
+          <strong style="color: #10b981;">Pago Liquidado y Verificado:</strong><br>
+          <strong>Fecha y Hora:</strong> ${formatDateTime(p.paidDate)}<br>
+          <strong>Pagado por:</strong> ${escapeHtml(p.paidBy)} &bull; <strong>Método:</strong> ${escapeHtml(p.method)}<br>
+          ${isCash ? `
+            <strong>Control de Efectivo:</strong> N° Recibo: ${escapeHtml(p.cashControl?.cashVoucherNumber || '-')} &bull; Custodio: ${escapeHtml(p.cashControl?.cashCustodian || '-')}
+          ` : `
+            <strong>N° Transacción / Ref:</strong> ${escapeHtml(p.transactionRef || 'Sin referencia')}
+          `}
+        </div>
+      </div>
+    `;
+  } else if (isPaid && !proof) {
+    rightColHtml = `
+      <div class="dual-viewer-col">
+        <div class="dual-viewer-col-header">
+          <span class="dual-viewer-col-title" style="color: #10b981;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            2. Comprobante de Pago Liquidado (Desembolso)
+          </span>
+          <span class="badge-pill green">Pagado</span>
+        </div>
+        <div class="dual-viewer-empty-box">
+          <strong style="color: #10b981;">Liquidación Realizada</strong>
+          <p style="font-size: 0.82rem; color: var(--text-muted); margin-top: 6px;">
+            El pago fue marcado como cancelado el ${formatDateTime(debt.payment?.paidDate)}.
+          </p>
+        </div>
+      </div>
+    `;
+  } else {
+    // Unpaid
+    rightColHtml = `
+      <div class="dual-viewer-col">
+        <div class="dual-viewer-col-header">
+          <span class="dual-viewer-col-title" style="color: #f59e0b;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            2. Espacio de Liquidación (Pendiente de Pago)
+          </span>
+          <span class="badge-pill yellow">Pendiente</span>
+        </div>
+        <div class="dual-viewer-empty-box" style="border-color: rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.04);">
+          <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="1.5" style="margin-bottom: 12px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <strong style="color: #f59e0b; font-size: 0.98rem;">Obligación Pendiente de Desembolso</strong>
+          <p style="font-size: 0.82rem; color: var(--text-muted); margin-top: 8px; max-width: 320px; line-height: 1.4;">
+            Fecha límite de vencimiento: <strong>${formatDate(debt.dueDate)}</strong>.<br>
+            El comprobante bancario o recibo de caja chica se adjuntará y quedará visible aquí al registrar el pago.
+          </p>
+          ${!isGerente && !debt.managerAssumed ? `
+            <button type="button" class="btn btn-success btn-sm" style="margin-top: 16px;" onclick="closeModal('modalDocViewer'); openPayModal('${debt.id}');">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              Proceder a Pagar Ahora
+            </button>
+          ` : ''}
+        </div>
+        <div class="dual-viewer-audit-meta">
+          <strong>Estado:</strong> ${debt.managerAssumed ? 'Asumido por Gerencia General' : 'Pendiente de pago por Asistente Contable'}<br>
+          <strong>Prioridad:</strong> ${escapeHtml(debt.priority)} &bull; <strong>Categoría:</strong> ${escapeHtml(debt.category || 'General')}
+        </div>
+      </div>
+    `;
+  }
+
+  // Inject content into modal
+  const contentArea = document.getElementById('viewerContentArea');
+  if (contentArea) {
+    contentArea.innerHTML = `
+      <div class="dual-viewer-header-summary">
+        <div>
+          <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 0.04em;">Expediente de Pago:</span>
+          <h3 style="color: var(--text-heading); font-size: 1.15rem; margin-top: 2px;">${escapeHtml(debt.provider)}</h3>
+          <p style="font-size: 0.84rem; color: var(--text-muted);">${escapeHtml(debt.concept)}</p>
+        </div>
+        <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+          <div style="text-align: right;">
+            <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Monto Liquidado:</span>
+            <div style="font-size: 1.35rem; font-weight: 900; color: ${isPaid ? '#10b981' : 'var(--text-heading)'};">
+              ${debt.currency || 'S/'} ${formatMoney(debt.amount)}
+            </div>
+          </div>
+          <div>
+            ${isPaid ? '<span class="badge-pill green" style="font-size: 0.82rem; padding: 6px 12px;">PAGADO ✓</span>' : '<span class="badge-pill yellow" style="font-size: 0.82rem; padding: 6px 12px;">PENDIENTE</span>'}
+          </div>
+        </div>
+      </div>
+
+      <div class="dual-viewer-grid">
+        ${leftColHtml}
+        ${rightColHtml}
+      </div>
+    `;
+  }
+
+  openModal('modalDocViewer');
+}
+
+function viewReceipts(debtId) {
+  openDualDocumentViewer(debtId);
 }
 
 function viewPaymentProof(debtId) {
-  const debt = state.debts.find(d => d.id === debtId);
-  if (!debt || !debt.payment || !debt.payment.proofFile) {
-    showToast('No se encontró el archivo del comprobante.', 'error');
-    return;
-  }
-
-  const p = debt.payment;
-  const proof = p.proofFile;
-  const isCash = p.method === 'Efectivo';
-
-  displayDocumentViewer({
-    title: `Comprobante de Pago - ${debt.provider}`,
-    fileName: proof.name,
-    fileUrl: proof.url || proof.dataUrl,
-    fileType: proof.type,
-    meta: `Pagado por ${p.paidBy} &bull; Método: ${p.method}`,
-    extraDetails: `
-      <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); padding: 10px; border-radius: 6px;">
-        <strong style="color: #10b981;">Verificación de Auditoría Contable:</strong><br>
-        <strong>Monto Pagado:</strong> S/ ${formatMoney(debt.amount)} &bull;
-        <strong>Fecha:</strong> ${formatDateTime(p.paidDate)} &bull;
-        <strong>Referencia:</strong> ${p.transactionRef || 'N/A'}<br>
-        ${isCash ? `
-          <strong style="color: #0891b2;">Control de Efectivo:</strong> N° Recibo: ${p.cashControl?.cashVoucherNumber} &bull; Recibido por: ${p.cashControl?.receivedBy} &bull; Custodio: ${p.cashControl?.cashCustodian}
-        ` : `
-          <strong>Tipo de Operación:</strong> Transferencia bancaria directa
-        `}
-      </div>
-    `
-  });
+  openDualDocumentViewer(debtId);
 }
 
 function displayDocumentViewer({ title, fileName, fileUrl, fileType, meta, extraDetails }) {
-  document.getElementById('viewerTitle').innerHTML = `
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-    ${escapeHtml(title)}
-  `;
+  const titleEl = document.getElementById('viewerTitle');
+  if (titleEl) {
+    titleEl.innerHTML = `
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      ${escapeHtml(title)}
+    `;
+  }
 
-  document.getElementById('viewerDocName').textContent = fileName || 'documento.pdf';
-  document.getElementById('viewerDocMeta').innerHTML = meta || '';
-  document.getElementById('viewerExtraDetails').innerHTML = extraDetails || '';
-
-  const downloadLink = document.getElementById('viewerDownloadLink');
-  downloadLink.href = fileUrl;
-  downloadLink.setAttribute('download', fileName || 'documento');
-
-  const container = document.getElementById('viewerFrameContainer');
-  container.innerHTML = '';
-
-  const isPdf = (fileType && fileType.includes('pdf')) || (fileUrl && fileUrl.endsWith('.pdf'));
-
-  if (isPdf) {
-    const iframe = document.createElement('iframe');
-    iframe.src = fileUrl;
-    iframe.title = fileName;
-    container.appendChild(iframe);
-  } else {
-    const img = document.createElement('img');
-    img.src = fileUrl;
-    img.alt = fileName;
-    container.appendChild(img);
+  const contentArea = document.getElementById('viewerContentArea');
+  if (contentArea) {
+    const isPdf = (fileType && fileType.includes('pdf')) || (fileUrl && fileUrl.endsWith('.pdf'));
+    contentArea.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <div>
+          <span style="font-weight: 700; color: var(--text-heading); font-size: 0.95rem;">${escapeHtml(fileName || 'documento.pdf')}</span>
+          <span style="font-size: 0.78rem; color: var(--text-muted); margin-left: 8px;">${meta || ''}</span>
+        </div>
+        <a href="${fileUrl}" target="_blank" download="${escapeHtml(fileName || 'documento')}" class="btn btn-secondary btn-sm">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Descargar
+        </a>
+      </div>
+      <div class="document-frame-container">
+        ${isPdf ? `<iframe src="${fileUrl}" title="${escapeHtml(fileName || 'documento')}"></iframe>` : `<img src="${fileUrl}" alt="${escapeHtml(fileName || 'documento')}">`}
+      </div>
+      <div style="margin-top: 14px; font-size: 0.82rem; color: var(--text-muted);">${extraDetails || ''}</div>
+    `;
   }
 
   openModal('modalDocViewer');

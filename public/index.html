@@ -305,8 +305,14 @@
     <!-- Empty state if no records -->
     <div class="empty-state" id="emptyState" style="display: none;">
       <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
-      <p style="font-size: 1.05rem; font-weight: 700; color: var(--text-heading);">No hay deudas registradas para este periodo</p>
-      <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">Usa el botón "+ Nueva Tarea de Pago" o navega a otro mes.</p>
+      <p id="emptyStateTitle" style="font-size: 1.05rem; font-weight: 700; color: var(--text-heading);">No hay deudas registradas para este periodo</p>
+      <p id="emptyStateSubtitle" style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">Usa el botón "+ Nueva Tarea de Pago" o navega a otro mes.</p>
+      <div id="emptyStateAction" style="margin-top: 14px; display: none;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="clearAllFilters()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+          Limpiar filtros y ver todas las tareas
+        </button>
+      </div>
     </div>
 
   </div> <!-- End .app-container -->
@@ -326,6 +332,15 @@
       </div>
       <form id="formNewDebt" onsubmit="handleCreateDebt(event)">
         <div class="modal-body">
+
+          <!-- Restored draft notification (D03) -->
+          <div id="draftRestoredAlert" style="display: none; background: rgba(99, 102, 241, 0.12); border: 1px solid rgba(99, 102, 241, 0.35); border-radius: var(--radius-sm); padding: 8px 12px; margin-bottom: 14px; font-size: 0.82rem; color: var(--text-heading); justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              <span><strong>Borrador recuperado:</strong> Se restauraron los datos que estabas completando.</span>
+            </div>
+            <button type="button" class="btn btn-secondary btn-sm" style="padding: 2px 8px; font-size: 0.74rem;" onclick="discardNewDebtDraft()">Descartar borrador</button>
+          </div>
           
           <div class="form-group">
             <label class="form-label" for="inpProvider">Nombre de Proveedor / A quién se le paga<span class="req">*</span></label>
@@ -340,7 +355,8 @@
           <div class="form-row">
             <div class="form-group">
               <label class="form-label" for="inpAmount">Importe (Monto S/)<span class="req">*</span></label>
-              <input type="number" id="inpAmount" class="form-input" step="0.01" min="0.10" max="1000000.00" placeholder="0.00" oninput="validateAmountInput(this)" required>
+              <input type="number" id="inpAmount" class="form-input" step="0.01" min="0.10" max="1000000.00" placeholder="0.00" oninput="validateAmountInput(this)" onblur="checkAmountOnBlur(this)" required>
+              <span id="amountHelperText" style="font-size: 0.72rem; color: var(--text-muted); display: block; margin-top: 3px;">Monto permitido: S/ 0.10 a S/ 1,000,000.00</span>
             </div>
             <div class="form-group">
               <label class="form-label" for="inpDueDate">Fecha de Vencimiento<span class="req">*</span></label>
@@ -654,36 +670,23 @@
 
 
   <!-- ==========================================================================
-       MODAL 4: VISOR DE DOCUMENTOS
+       MODAL 4: VISOR DE DOCUMENTOS Y AUDITORÍA CONTABLE (BOLETA Y PAGO SIMULTÁNEO)
        ========================================================================== -->
   <div class="modal-overlay" id="modalDocViewer">
     <div class="modal-content wide">
       <div class="modal-header">
         <h3 class="modal-title" id="viewerTitle">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          Visor de Documento Contable
+          Auditoría Documentaria: Boleta por Pagar vs Comprobante de Pago
         </h3>
         <button type="button" class="modal-close-btn" onclick="closeModal('modalDocViewer')">&times;</button>
       </div>
-      <div class="modal-body" style="padding: 18px 24px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-          <div>
-            <span id="viewerDocName" style="font-weight: 700; color: var(--text-heading); font-size: 0.95rem;">documento.pdf</span>
-            <span id="viewerDocMeta" style="font-size: 0.78rem; color: var(--text-muted); margin-left: 8px;"></span>
-          </div>
-          <a id="viewerDownloadLink" href="#" target="_blank" download class="btn btn-secondary btn-sm">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Descargar
-          </a>
+      <div class="modal-body" id="viewerModalBody" style="padding: 18px 24px;">
+        <div id="viewerContentArea">
+          <!-- Dynamic: Dual comparison or single doc view rendered via JS -->
         </div>
-
-        <div class="document-frame-container" id="viewerFrameContainer">
-          <!-- Dynamic iframe or img -->
-        </div>
-
-        <div id="viewerExtraDetails" style="margin-top: 14px; font-size: 0.82rem; color: var(--text-muted);"></div>
       </div>
-      <div class="modal-footer">
+      <div class="modal-footer" id="viewerFooter">
         <button type="button" class="btn btn-secondary" onclick="closeModal('modalDocViewer')">Cerrar</button>
       </div>
     </div>
