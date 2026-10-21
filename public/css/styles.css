@@ -651,8 +651,8 @@ body {
    ========================================================================== */
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
   margin-bottom: 28px;
 }
 
@@ -660,7 +660,7 @@ body {
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  padding: 20px;
+  padding: 22px 24px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -668,6 +668,7 @@ body {
   transition: all var(--transition-fast);
   position: relative;
   overflow: hidden;
+  min-height: 125px;
 }
 
 .summary-card:hover {
@@ -687,7 +688,6 @@ body {
 .summary-card.paid::before { background: var(--accent-success); }
 .summary-card.pending::before { background: var(--row-orange-border); }
 .summary-card.urgent::before { background: var(--row-red-border); }
-.summary-card.cash::before { background: #06b6d4; }
 
 .card-top {
   display: flex;

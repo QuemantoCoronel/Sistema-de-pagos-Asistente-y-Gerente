@@ -140,11 +140,14 @@ function showApp() {
 
   if (state.currentUser.role === 'gerente') {
     userTitle.style.color = '#818cf8';
-    roleBanner.className = 'role-banner gerente-mode';
-    roleBannerText.innerHTML = `
-      <strong>Pantalla Principal de Gerencia:</strong> Visualización directa del estado mensual consolidado en formato <strong>Post-it</strong>, ordenadas por vencimiento con código de colores.
-      El Gerente no registra deudas ni realiza pagos ordinarios, salvo excepciones donde él mismo indique que se encargará.
-    `;
+    if (roleBanner) {
+      roleBanner.className = 'role-banner gerente-mode';
+    }
+    if (roleBannerText) {
+      roleBannerText.innerHTML = `
+        <strong>Pantalla Principal de Gerencia:</strong> Visualización directa del estado mensual consolidado en formato <strong>Post-it</strong>, ordenadas por vencimiento con código de colores.
+      `;
+    }
 
     toolbarActions.innerHTML = `
       <div style="display: flex; align-items: center; gap: 8px;">
@@ -161,10 +164,14 @@ function showApp() {
   } else {
     // Asistente Role
     userTitle.style.color = 'var(--accent-primary)';
-    roleBanner.className = 'role-banner asistente-mode';
-    roleBannerText.innerHTML = `
-      <strong>Modo Operativo (Asistente):</strong> Encargada de crear tareas de pago, recibir y adjuntar recibos/facturas, ejecutar los pagos (subiendo obligatoriamente el comprobante) y registrar el control de pagos en efectivo.
-    `;
+    if (roleBanner) {
+      roleBanner.className = 'role-banner asistente-mode';
+    }
+    if (roleBannerText) {
+      roleBannerText.innerHTML = `
+        <strong>Modo Operativo (Asistente):</strong> Encargada de crear tareas de pago, recibir y adjuntar recibos/facturas, ejecutar los pagos (subiendo obligatoriamente el comprobante).
+      `;
+    }
 
     toolbarActions.innerHTML = `
       <button type="button" class="btn btn-primary" id="btnNewDebt" onclick="openNewDebtModal()">
@@ -1088,25 +1095,16 @@ function renderDebtsTable() {
 function updateSummaryKPIs() {
   let totalPaid = 0;
   let totalPending = 0;
-  let totalCash = 0;
-  let totalBank = 0;
   let urgentCount = 0;
   let expiredCount = 0;
   let soonCount = 0;
   let paidCount = 0;
-  let cashCount = 0;
 
   state.debts.forEach(d => {
     const amt = Number(d.amount) || 0;
     if (d.status === 'Pagado') {
       totalPaid += amt;
       paidCount++;
-      if (d.payment?.method === 'Efectivo') {
-        totalCash += amt;
-        cashCount++;
-      } else {
-        totalBank += amt;
-      }
     } else {
       totalPending += amt;
       const alert = calculateDueAlert(d.dueDate, false);
@@ -1131,9 +1129,6 @@ function updateSummaryKPIs() {
   const kpiPendingCount = document.getElementById('kpiPendingCount');
   const kpiUrgentCount = document.getElementById('kpiUrgentCount');
   const kpiSoonCount = document.getElementById('kpiSoonCount');
-  const kpiCashTotal = document.getElementById('kpiCashTotal');
-  const kpiCashCount = document.getElementById('kpiCashCount');
-  const kpiBankTotal = document.getElementById('kpiBankTotal');
 
   if (kpiTotalPaid) kpiTotalPaid.textContent = `S/ ${formatMoney(totalPaid)}`;
   if (kpiPaidPercent) kpiPaidPercent.textContent = `${percentPaid}% liquidado`;
@@ -1148,9 +1143,6 @@ function updateSummaryKPIs() {
   }
 
   if (kpiSoonCount) kpiSoonCount.textContent = `+${soonCount} próximos`;
-  if (kpiCashTotal) kpiCashTotal.textContent = `S/ ${formatMoney(totalCash)}`;
-  if (kpiCashCount) kpiCashCount.textContent = `${cashCount} arqueo${cashCount !== 1 ? 's' : ''}`;
-  if (kpiBankTotal) kpiBankTotal.textContent = `Banco: S/ ${formatMoney(totalBank)}`;
 }
 
 // ==========================================================================
