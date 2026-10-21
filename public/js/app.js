@@ -379,8 +379,8 @@ function navigateMonth(offset) {
   }
 
   const nextMonthStr = `${year}-${String(month).padStart(2, '0')}`;
-  if (nextMonthStr < '2026-09') {
-    showToast('No existen registros anteriores a Setiembre de 2026.', 'info');
+  if (nextMonthStr < '2025-01') {
+    showToast('No existen registros anteriores a 2025.', 'info');
     return;
   }
   if (nextMonthStr > '2027-12') {
@@ -479,7 +479,7 @@ function updateDateHelperTexts() {
   }
   const dueHelper = document.getElementById('dueDateHelperText');
   if (dueHelper) {
-    dueHelper.textContent = `Solo desde hoy (${todayFormatted}) hasta 31/12/2027 (no se admiten fechas pasadas).`;
+    dueHelper.textContent = 'Fecha que figura en el recibo (si ya venció, se calcularán automáticamente los días de atraso).';
   }
 }
 
@@ -542,9 +542,9 @@ function enforceDateBounds(input, isDateTime = false) {
   const maxPay = `${todayStr}T23:59`;
 
   const year = parseInt(parts[0], 10);
-  if (isNaN(year) || parts[0].length !== 4 || year < 2026 || year > 2027) {
+  if (isNaN(year) || parts[0].length !== 4 || year < 2024 || year > 2027) {
     input.classList.add('input-error');
-    showToast('Año no válido. El año debe tener exactamente 4 dígitos (2026 o 2027).', 'error');
+    showToast('Año no válido. El año debe tener exactamente 4 dígitos (entre 2024 y 2027).', 'error');
     return;
   }
   
@@ -559,10 +559,7 @@ function enforceDateBounds(input, isDateTime = false) {
       input.classList.remove('input-error');
     }
   } else {
-    if (val < todayStr) {
-      input.classList.add('input-error');
-      showToast(`No se pueden crear tareas con fecha de vencimiento anterior al día de hoy (${todayFormatted}).`, 'error');
-    } else if (val > MAX_CREATION_DATE) {
+    if (val > MAX_CREATION_DATE) {
       input.classList.add('input-error');
       showToast('La fecha de vencimiento no puede exceder Diciembre de 2027.', 'error');
     } else {
@@ -580,7 +577,7 @@ function isValidAppDate(dateStr, isDateTime = false) {
   const year = parseInt(y, 10);
   const month = parseInt(m, 10);
   const day = parseInt(d, 10);
-  if (y.length !== 4 || year < 2026 || year > 2027) return false;
+  if (y.length !== 4 || year < 2024 || year > 2027) return false;
   if (month < 1 || month > 12) return false;
   if (day < 1 || day > 31) return false;
 
@@ -588,7 +585,7 @@ function isValidAppDate(dateStr, isDateTime = false) {
   if (isDateTime) {
     if (dateOnly !== todayStr) return false;
   } else {
-    if (dateOnly < todayStr || dateOnly > MAX_CREATION_DATE) return false;
+    if (dateOnly > MAX_CREATION_DATE) return false;
   }
   return true;
 }
@@ -626,12 +623,13 @@ function calculateDueAlert(dueDateStr, isPaid) {
   if (diffDays <= 1) {
     let text = 'Vence mañana';
     let isExpired = false;
+    let daysOverdue = 0;
     if (diffDays === 0) {
       text = '¡Vence HOY!';
     } else if (diffDays < 0) {
       isExpired = true;
-      const daysOverdue = Math.abs(diffDays);
-      text = daysOverdue === 1 ? '¡VENCIDO (Ayer)!' : `¡VENCIDO (${daysOverdue}d)!`;
+      daysOverdue = Math.abs(diffDays);
+      text = daysOverdue === 1 ? '¡VENCIDO (Ayer - 1 día)!' : `¡VENCIDO (Hace ${daysOverdue} días)!`;
     }
 
     return {
@@ -640,6 +638,7 @@ function calculateDueAlert(dueDateStr, isPaid) {
       badgeClass: isExpired ? 'status-pill-red status-pill-expired' : 'status-pill-red',
       label: text,
       diffDays: diffDays,
+      daysOverdue: daysOverdue,
       urgency: 'red',
       isExpired: isExpired
     };
@@ -941,7 +940,7 @@ function renderPostits() {
 
           <div class="postit-tags-row">
             <span class="category-tag">${escapeHtml(d.category || 'General')}</span>
-            ${alert.isExpired ? '<span class="category-tag" style="background: rgba(239, 68, 68, 0.22); color: #ef4444; border-color: #ef4444; font-weight: 800;">⚠️ ESTADO: VENCIDO</span>' : ''}
+            ${alert.isExpired ? `<span class="category-tag" style="background: rgba(239, 68, 68, 0.22); color: #ef4444; border-color: #ef4444; font-weight: 800;">⚠️ ATRASADO: ${alert.daysOverdue} ${alert.daysOverdue === 1 ? 'DÍA' : 'DÍAS'}</span>` : ''}
             ${d.isRecurring ? `<span class="category-tag" style="color: #0891b2; border-color: rgba(6, 182, 212, 0.4);">&#8635; Recurrente (${escapeHtml(d.recurringCategory || 'Fijo')})</span>` : ''}
             ${cashInfoHtml}
           </div>
@@ -957,7 +956,7 @@ function renderPostits() {
             <span>${alert.isExpired ? 'Venció el:' : 'Fecha de Vencimiento:'}</span>
             <span class="postit-date-val" style="${alert.isExpired ? 'color: #ef4444; font-weight: 800;' : ''}">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-              ${formatDate(d.dueDate)}
+              ${formatDate(d.dueDate)} ${alert.isExpired ? `(hace ${alert.daysOverdue} ${alert.daysOverdue === 1 ? 'día' : 'días'})` : ''}
             </span>
           </div>
         </div>
@@ -1231,10 +1230,9 @@ function openNewDebtModal() {
 
   updateDateHelperTexts();
 
-  const todayStr = getTodayStr();
   const inpDueDate = document.getElementById('inpDueDate');
   if (inpDueDate) {
-    inpDueDate.min = todayStr;
+    inpDueDate.min = '2024-01-01';
     inpDueDate.max = MAX_CREATION_DATE;
   }
 
@@ -1329,20 +1327,10 @@ async function handleCreateDebt(e) {
   }
   document.getElementById('inpAmount').classList.remove('input-error');
 
-  const todayStr = getTodayStr();
-  const todayFormatted = getTodayFormattedDMY();
-
-  if (dueDate < todayStr) {
-    document.getElementById('inpDueDate').classList.add('input-error');
-    document.getElementById('inpDueDate').focus();
-    showToast(`No se pueden registrar tareas con fecha anterior al día de hoy (${todayFormatted}).`, 'error');
-    return;
-  }
-
   if (!isValidAppDate(dueDate, false)) {
     document.getElementById('inpDueDate').classList.add('input-error');
     document.getElementById('inpDueDate').focus();
-    showToast(`Fecha de vencimiento no válida. El año debe tener 4 dígitos y encontrarse entre hoy (${todayFormatted}) y 31/12/2027.`, 'error');
+    showToast('Fecha de vencimiento no válida. El año debe tener 4 dígitos y encontrarse entre 2024 y 2027.', 'error');
     return;
   }
   document.getElementById('inpDueDate').classList.remove('input-error');
@@ -1386,6 +1374,14 @@ async function handleCreateDebt(e) {
       const banner = document.getElementById('draftRestoredAlert');
       if (banner) banner.style.display = 'none';
 
+      // Si se crea un recibo con fecha de otro mes (ej. mes pasado), conmutar automáticamente a ese periodo
+      const dueMonth = dueDate.substring(0, 7);
+      if (dueMonth && state.currentMonth !== dueMonth) {
+        state.currentMonth = dueMonth;
+        syncMonthSelect();
+        updateMonthDisplay();
+      }
+
       showToast('Tarea de pago creada exitosamente.', 'success');
       closeModal('modalNewDebt');
       loadData();
@@ -1411,6 +1407,12 @@ async function handleCreateDebt(e) {
       createdAt: new Date().toISOString().substring(0, 10)
     });
     saveLocalFallback(state.debts);
+    const dueMonth = dueDate.substring(0, 7);
+    if (dueMonth && state.currentMonth !== dueMonth) {
+      state.currentMonth = dueMonth;
+      syncMonthSelect();
+      updateMonthDisplay();
+    }
     showToast('Tarea creada localmente.', 'success');
     closeModal('modalNewDebt');
     applyFiltersAndRender();

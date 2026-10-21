@@ -259,18 +259,16 @@ const server = http.createServer(async (req, res) => {
           return sendJson(res, 400, { success: false, message: 'La fecha de vencimiento debe tener formato AAAA-MM-DD con año de 4 dígitos.' });
         }
         const dueYear = parseInt(dueMatch[1], 10);
-        // CRITICAL REQUIREMENT: Prohibido crear nada con fecha anterior a hoy ni posterior a 2027
-        const { limaDate, utcDate } = getSystemDateStrings();
-        const minAllowedDate = limaDate < utcDate ? limaDate : utcDate;
-
-        if (dueYear < 2026 || dueYear > 2027 || body.dueDate < minAllowedDate || body.dueDate > '2027-12-31') {
+        // Permitir registrar recibos pasados (atrasados) o futuros dentro del rango 2024 - 2027
+        if (dueYear < 2024 || dueYear > 2027 || body.dueDate > '2027-12-31') {
           return sendJson(res, 400, {
             success: false,
-            message: `Fecha no permitida. No se pueden crear pagos o tareas con fecha anterior al día de hoy (${limaDate}) ni posteriores a 2027.`
+            message: 'Fecha no permitida. El año de vencimiento debe encontrarse entre 2024 y 2027.'
           });
         }
 
         const debts = readDebts();
+        const { limaDate } = getSystemDateStrings();
         const newId = 'PAY-' + body.dueDate.replace(/-/g, '').substring(0, 6) + '-' + String(debts.length + 1).padStart(3, '0');
 
         const newDebt = {
