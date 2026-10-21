@@ -359,6 +359,13 @@ const server = http.createServer(async (req, res) => {
 
         const notes = (body.notes || '').trim().substring(0, 250);
 
+        if (body.updatedAmount !== undefined) {
+          const ua = Number(body.updatedAmount);
+          if (!isNaN(ua) && ua > 0 && ua <= 1000000) {
+            debts[index].amount = Math.round(ua * 100) / 100;
+          }
+        }
+
         debts[index].status = 'Pagado';
         debts[index].payment = {
           paidDate: body.paidDate || `${limaDate}T12:00`,

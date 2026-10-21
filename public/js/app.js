@@ -949,15 +949,7 @@ function renderPostits() {
           ${managerBannerHtml}
 
           <div class="postit-amount-box">
-            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-              <span class="postit-amount-label">Monto a Liquidar</span>
-              ${d.isRecurring && !isPaid && !isGerente ? `
-                <button type="button" class="btn-adjust-price" onclick="openAdjustRecurringPriceModal('${d.id}')" title="Alterar precio de este recibo variable (luz, agua, internet)">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-                  Alterar Precio
-                </button>
-              ` : ''}
-            </div>
+            <span class="postit-amount-label">Monto a Liquidar</span>
             <span class="postit-amount-value">${d.currency || 'S/'} ${formatMoney(d.amount)}</span>
           </div>
 
@@ -1079,14 +1071,7 @@ function renderDebtsTable() {
         <span class="priority-pill ${priorityClass}">${escapeHtml(d.priority)}</span>
       </td>
       <td style="text-align: right;">
-        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 3px;">
-          <span class="amount-cell ${isPaid ? 'paid' : ''}">${d.currency || 'S/'} ${formatMoney(d.amount)}</span>
-          ${d.isRecurring && !isPaid && !isGerente ? `
-            <button type="button" class="btn-adjust-price" onclick="openAdjustRecurringPriceModal('${d.id}')" title="Alterar monto del recibo variable">
-              Alterar
-            </button>
-          ` : ''}
-        </div>
+        <span class="amount-cell ${isPaid ? 'paid' : ''}">${d.currency || 'S/'} ${formatMoney(d.amount)}</span>
       </td>
       <td style="text-align: center;">
         ${receiptsHtml}
@@ -1448,19 +1433,22 @@ function openPayModal(debtId) {
   document.getElementById('payDebtProvider').textContent = debt.provider;
   document.getElementById('payDebtConcept').textContent = debt.concept;
 
-  const payDebtAmount = document.getElementById('payDebtAmount');
-  if (payDebtAmount) {
+  const inpPayAmount = document.getElementById('inpPayAmount');
+  const payRecurringHint = document.getElementById('payRecurringHint');
+
+  if (inpPayAmount) {
+    inpPayAmount.value = Number(debt.amount).toFixed(2);
+    inpPayAmount.classList.remove('input-error');
     if (debt.isRecurring) {
-      payDebtAmount.innerHTML = `
-        <div style="display: flex; align-items: center; justify-content: flex-end; gap: 8px;">
-          <span>${debt.currency || 'S/'} ${formatMoney(debt.amount)}</span>
-          <button type="button" class="btn-adjust-price" onclick="openAdjustRecurringPriceModal('${debt.id}')" title="Ajustar monto si el recibo físico llegó con otro precio" style="font-size: 0.7rem; padding: 2px 7px;">
-            Alterar Precio
-          </button>
-        </div>
-      `;
+      inpPayAmount.removeAttribute('readonly');
+      inpPayAmount.style.borderColor = '#0891b2';
+      inpPayAmount.style.background = 'var(--bg-input)';
+      if (payRecurringHint) payRecurringHint.style.display = 'block';
     } else {
-      payDebtAmount.textContent = `${debt.currency || 'S/'} ${formatMoney(debt.amount)}`;
+      inpPayAmount.setAttribute('readonly', 'true');
+      inpPayAmount.style.borderColor = 'var(--border-medium)';
+      inpPayAmount.style.background = 'transparent';
+      if (payRecurringHint) payRecurringHint.style.display = 'none';
     }
   }
 
@@ -1621,11 +1609,21 @@ async function handleExecutePayment(e) {
     transactionRef = rawRef;
   }
 
+  const inpPayAmount = document.getElementById('inpPayAmount');
+  let updatedAmount = undefined;
+  if (inpPayAmount) {
+    const pVal = parseFloat(inpPayAmount.value);
+    if (!isNaN(pVal) && pVal > 0 && pVal <= 1000000) {
+      updatedAmount = Math.round(pVal * 100) / 100;
+    }
+  }
+
   const payload = {
     method,
     paidDate: payDate,
     paidBy: `${state.currentUser.name} (${state.currentUser.title})`,
     transactionRef,
+    updatedAmount,
     proofFile: {
       name: state.selectedPaymentProofFile.name,
       type: state.selectedPaymentProofFile.type,
@@ -1657,12 +1655,16 @@ async function handleExecutePayment(e) {
   } catch (err) {
     const idx = state.debts.findIndex(d => d.id === debtId);
     if (idx !== -1) {
+      if (updatedAmount !== undefined) {
+        state.debts[idx].amount = updatedAmount;
+      }
       state.debts[idx].status = 'Pagado';
       state.debts[idx].payment = payload;
       saveLocalFallback(state.debts);
       showToast('Pago registrado localmente.', 'success');
       closeModal('modalPayDebt');
       applyFiltersAndRender();
+      updateSummaryKPIs();
     }
   }
 }
@@ -2093,100 +2095,7 @@ async function handleGenerateNextMonthRecurring(targetMonthStr) {
   }
 }
 
-// ==========================================================================
-// MODAL 6: AJUSTAR PRECIO DE RECURRENTE VARIABLE (LUZ, AGUA, INTERNET)
-// ==========================================================================
-function openAdjustRecurringPriceModal(debtId) {
-  const debt = state.debts.find(d => d.id === debtId);
-  if (!debt) return;
 
-  if (state.currentUser?.role !== 'asistente') {
-    showToast('Solo el asistente puede modificar importes de servicios.', 'error');
-    return;
-  }
-
-  if (debt.status === 'Pagado') {
-    showToast('No se puede alterar el precio de un recibo que ya fue pagado.', 'error');
-    return;
-  }
-
-  document.getElementById('adjustPriceDebtId').value = debt.id;
-  document.getElementById('adjustPriceProvider').textContent = debt.provider;
-  document.getElementById('adjustPriceConcept').textContent = `${debt.concept} • ${debt.recurringCategory || 'Recurrente'}`;
-  document.getElementById('adjustPriceCurrentAmount').textContent = `${debt.currency || 'S/'} ${formatMoney(debt.amount)}`;
-
-  const inp = document.getElementById('inpAdjustNewAmount');
-  inp.value = Number(debt.amount).toFixed(2);
-  inp.classList.remove('input-error');
-
-  const errEl = document.getElementById('errAdjustNewAmount');
-  if (errEl) errEl.textContent = '';
-
-  openModal('modalAdjustRecurringPrice');
-  setTimeout(() => {
-    inp.focus();
-    inp.select();
-  }, 100);
-}
-
-async function handleSaveAdjustedPrice() {
-  const debtId = document.getElementById('adjustPriceDebtId').value;
-  const inp = document.getElementById('inpAdjustNewAmount');
-  const errEl = document.getElementById('errAdjustNewAmount');
-  const valStr = inp.value.trim();
-  const val = parseFloat(valStr);
-
-  if (!valStr || isNaN(val) || val <= 0) {
-    inp.classList.add('input-error');
-    if (errEl) errEl.textContent = 'Ingresa un importe válido mayor a 0.';
-    return;
-  }
-  if (val > 1000000) {
-    inp.classList.add('input-error');
-    if (errEl) errEl.textContent = 'El importe no puede superar S/ 1,000,000.00';
-    return;
-  }
-
-  inp.classList.remove('input-error');
-  if (errEl) errEl.textContent = '';
-
-  const rounded = Math.round(val * 100) / 100;
-
-  try {
-    const res = await fetch(`/api/debts/${encodeURIComponent(debtId)}/amount`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ amount: rounded })
-    });
-
-    if (res.ok) {
-      const json = await res.json();
-      const idx = state.debts.findIndex(d => d.id === debtId);
-      if (idx !== -1) {
-        state.debts[idx].amount = rounded;
-      }
-      saveLocalFallback(state.debts);
-      closeModal('modalAdjustRecurringPrice');
-      applyFiltersAndRender();
-      updateSummaryKPIs();
-      showToast(`Precio actualizado a S/ ${formatMoney(rounded)}.`, 'success');
-    } else {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.message || 'Error al actualizar importe.');
-    }
-  } catch (e) {
-    // Fallback local
-    const idx = state.debts.findIndex(d => d.id === debtId);
-    if (idx !== -1) {
-      state.debts[idx].amount = rounded;
-    }
-    saveLocalFallback(state.debts);
-    closeModal('modalAdjustRecurringPrice');
-    applyFiltersAndRender();
-    updateSummaryKPIs();
-    showToast(`Precio actualizado a S/ ${formatMoney(rounded)}.`, 'success');
-  }
-}
 
 // ==========================================================================
 // HELPERS
