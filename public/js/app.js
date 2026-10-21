@@ -949,7 +949,15 @@ function renderPostits() {
           ${managerBannerHtml}
 
           <div class="postit-amount-box">
-            <span class="postit-amount-label">Monto a Liquidar</span>
+            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+              <span class="postit-amount-label">Monto a Liquidar</span>
+              ${d.isRecurring && !isPaid && !isGerente ? `
+                <button type="button" class="btn-adjust-price" onclick="openAdjustRecurringPriceModal('${d.id}')" title="Alterar precio de este recibo variable (luz, agua, internet)">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                  Alterar Precio
+                </button>
+              ` : ''}
+            </div>
             <span class="postit-amount-value">${d.currency || 'S/'} ${formatMoney(d.amount)}</span>
           </div>
 
@@ -1071,7 +1079,14 @@ function renderDebtsTable() {
         <span class="priority-pill ${priorityClass}">${escapeHtml(d.priority)}</span>
       </td>
       <td style="text-align: right;">
-        <span class="amount-cell ${isPaid ? 'paid' : ''}">${d.currency || 'S/'} ${formatMoney(d.amount)}</span>
+        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 3px;">
+          <span class="amount-cell ${isPaid ? 'paid' : ''}">${d.currency || 'S/'} ${formatMoney(d.amount)}</span>
+          ${d.isRecurring && !isPaid && !isGerente ? `
+            <button type="button" class="btn-adjust-price" onclick="openAdjustRecurringPriceModal('${d.id}')" title="Alterar monto del recibo variable">
+              Alterar
+            </button>
+          ` : ''}
+        </div>
       </td>
       <td style="text-align: center;">
         ${receiptsHtml}
@@ -1432,7 +1447,22 @@ function openPayModal(debtId) {
   document.getElementById('payDebtId').value = debt.id;
   document.getElementById('payDebtProvider').textContent = debt.provider;
   document.getElementById('payDebtConcept').textContent = debt.concept;
-  document.getElementById('payDebtAmount').textContent = `${debt.currency || 'S/'} ${formatMoney(debt.amount)}`;
+
+  const payDebtAmount = document.getElementById('payDebtAmount');
+  if (payDebtAmount) {
+    if (debt.isRecurring) {
+      payDebtAmount.innerHTML = `
+        <div style="display: flex; align-items: center; justify-content: flex-end; gap: 8px;">
+          <span>${debt.currency || 'S/'} ${formatMoney(debt.amount)}</span>
+          <button type="button" class="btn-adjust-price" onclick="openAdjustRecurringPriceModal('${debt.id}')" title="Ajustar monto si el recibo físico llegó con otro precio" style="font-size: 0.7rem; padding: 2px 7px;">
+            Alterar Precio
+          </button>
+        </div>
+      `;
+    } else {
+      payDebtAmount.textContent = `${debt.currency || 'S/'} ${formatMoney(debt.amount)}`;
+    }
+  }
 
   updateDateHelperTexts();
 
@@ -1991,7 +2021,7 @@ function openRecurringModal() {
       if (!map.has(key)) map.set(key, item);
     });
 
-    map.forEach(item => {
+    map.forEach((item, key) => {
       const card = document.createElement('div');
       card.style.background = 'var(--bg-card-subtle)';
       card.style.padding = '12px 16px';
@@ -2000,15 +2030,27 @@ function openRecurringModal() {
       card.style.display = 'flex';
       card.style.justifyContent = 'space-between';
       card.style.alignItems = 'center';
+      card.style.gap = '14px';
+      card.style.flexWrap = 'wrap';
 
       card.innerHTML = `
-        <div>
-          <strong style="color: var(--text-heading); font-size: 0.92rem;">${escapeHtml(item.provider)}</strong>
+        <div style="flex: 1; min-width: 180px;">
+          <strong style="color: var(--text-heading); font-size: 0.95rem;">${escapeHtml(item.provider)}</strong>
           <div style="font-size: 0.78rem; color: var(--text-muted);">${escapeHtml(item.recurringCategory || item.concept)} &bull; Vence día ${item.dueDate.substring(8, 10)} de cada mes</div>
+          <span style="font-size: 0.72rem; color: #0891b2; font-weight: 700;">&#8635; Recurrente Variable (Luz, Agua, Internet, etc.)</span>
         </div>
-        <div style="text-align: right;">
-          <span style="font-size: 1rem; font-weight: 800; color: #10b981;">S/ ${formatMoney(item.amount)}</span>
-          <div style="font-size: 0.72rem; color: #0891b2;">Recurrente Fijo</div>
+        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+          <label style="font-size: 0.72rem; color: var(--text-muted); font-weight: 700;">Importe a programar:</label>
+          <div style="display: flex; align-items: center; gap: 4px;">
+            <span style="font-size: 0.95rem; font-weight: 800; color: #10b981;">S/</span>
+            <input type="number" step="0.01" min="0.01" max="1000000"
+              class="form-input recurring-amount-input"
+              data-key="${escapeHtml(key)}"
+              value="${Number(item.amount).toFixed(2)}"
+              style="width: 120px; padding: 6px 10px; font-weight: 800; font-size: 1rem; text-align: right; color: #10b981; border-color: #0891b2;"
+              title="Puedes alterar el precio si este mes el recibo varía"
+            >
+          </div>
         </div>
       `;
       container.appendChild(card);
@@ -2019,11 +2061,20 @@ function openRecurringModal() {
 }
 
 async function handleGenerateNextMonthRecurring(targetMonthStr) {
+  const customAmounts = {};
+  document.querySelectorAll('.recurring-amount-input').forEach(input => {
+    const k = input.getAttribute('data-key');
+    const val = parseFloat(input.value);
+    if (k && !isNaN(val) && val > 0 && val <= 1000000) {
+      customAmounts[k] = val;
+    }
+  });
+
   try {
     const res = await fetch('/api/debts/recurring/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ targetMonth: targetMonthStr })
+      body: JSON.stringify({ targetMonth: targetMonthStr, customAmounts })
     });
 
     if (res.ok) {
@@ -2039,6 +2090,101 @@ async function handleGenerateNextMonthRecurring(targetMonthStr) {
   } catch {
     showToast('Operación completada.', 'info');
     closeModal('modalRecurring');
+  }
+}
+
+// ==========================================================================
+// MODAL 6: AJUSTAR PRECIO DE RECURRENTE VARIABLE (LUZ, AGUA, INTERNET)
+// ==========================================================================
+function openAdjustRecurringPriceModal(debtId) {
+  const debt = state.debts.find(d => d.id === debtId);
+  if (!debt) return;
+
+  if (state.currentUser?.role !== 'asistente') {
+    showToast('Solo el asistente puede modificar importes de servicios.', 'error');
+    return;
+  }
+
+  if (debt.status === 'Pagado') {
+    showToast('No se puede alterar el precio de un recibo que ya fue pagado.', 'error');
+    return;
+  }
+
+  document.getElementById('adjustPriceDebtId').value = debt.id;
+  document.getElementById('adjustPriceProvider').textContent = debt.provider;
+  document.getElementById('adjustPriceConcept').textContent = `${debt.concept} • ${debt.recurringCategory || 'Recurrente'}`;
+  document.getElementById('adjustPriceCurrentAmount').textContent = `${debt.currency || 'S/'} ${formatMoney(debt.amount)}`;
+
+  const inp = document.getElementById('inpAdjustNewAmount');
+  inp.value = Number(debt.amount).toFixed(2);
+  inp.classList.remove('input-error');
+
+  const errEl = document.getElementById('errAdjustNewAmount');
+  if (errEl) errEl.textContent = '';
+
+  openModal('modalAdjustRecurringPrice');
+  setTimeout(() => {
+    inp.focus();
+    inp.select();
+  }, 100);
+}
+
+async function handleSaveAdjustedPrice() {
+  const debtId = document.getElementById('adjustPriceDebtId').value;
+  const inp = document.getElementById('inpAdjustNewAmount');
+  const errEl = document.getElementById('errAdjustNewAmount');
+  const valStr = inp.value.trim();
+  const val = parseFloat(valStr);
+
+  if (!valStr || isNaN(val) || val <= 0) {
+    inp.classList.add('input-error');
+    if (errEl) errEl.textContent = 'Ingresa un importe válido mayor a 0.';
+    return;
+  }
+  if (val > 1000000) {
+    inp.classList.add('input-error');
+    if (errEl) errEl.textContent = 'El importe no puede superar S/ 1,000,000.00';
+    return;
+  }
+
+  inp.classList.remove('input-error');
+  if (errEl) errEl.textContent = '';
+
+  const rounded = Math.round(val * 100) / 100;
+
+  try {
+    const res = await fetch(`/api/debts/${encodeURIComponent(debtId)}/amount`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount: rounded })
+    });
+
+    if (res.ok) {
+      const json = await res.json();
+      const idx = state.debts.findIndex(d => d.id === debtId);
+      if (idx !== -1) {
+        state.debts[idx].amount = rounded;
+      }
+      saveLocalFallback(state.debts);
+      closeModal('modalAdjustRecurringPrice');
+      applyFiltersAndRender();
+      updateSummaryKPIs();
+      showToast(`Precio actualizado a S/ ${formatMoney(rounded)}.`, 'success');
+    } else {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'Error al actualizar importe.');
+    }
+  } catch (e) {
+    // Fallback local
+    const idx = state.debts.findIndex(d => d.id === debtId);
+    if (idx !== -1) {
+      state.debts[idx].amount = rounded;
+    }
+    saveLocalFallback(state.debts);
+    closeModal('modalAdjustRecurringPrice');
+    applyFiltersAndRender();
+    updateSummaryKPIs();
+    showToast(`Precio actualizado a S/ ${formatMoney(rounded)}.`, 'success');
   }
 }
 

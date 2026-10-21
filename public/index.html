@@ -376,6 +376,7 @@
           <div class="form-group" id="groupRecurringCategory" style="display: none;">
             <label class="form-label" for="inpRecurringCategory">Tipo de Servicio Recurrente</label>
             <input type="text" id="inpRecurringCategory" class="form-input" placeholder="Ej. Agua, Luz, Internet, Renta mensual..." maxlength="60">
+            <span style="font-size: 0.74rem; color: #0891b2; margin-top: 4px; display: block;">💡 Servicios como luz, agua o internet no suelen ser fijos: podrás alterar el precio cada mes al programar o recibir el recibo.</span>
           </div>
 
           <!-- Attach Receipt / Invoice -->
@@ -683,11 +684,11 @@
       </div>
       <div class="modal-body">
         <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 16px;">
-          Esta herramienta permite pre-programar automáticamente las obligaciones fijas recurrentes del próximo mes para mantener la planificación contable al día.
+          Esta herramienta permite pre-programar automáticamente las obligaciones recurrentes del próximo mes. Como los recibos de <strong>luz, agua e internet</strong> no suelen ser fijos, <strong>puedes alterar el importe</strong> de cada servicio en la casilla correspondiente antes de programarlo.
         </p>
 
         <div id="recurringListContainer" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px;">
-          <!-- Dynamically populated -->
+          <!-- Dynamically populated with editable amount inputs -->
         </div>
 
         <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: var(--radius-md); padding: 14px;">
@@ -695,7 +696,7 @@
             <div>
               <strong style="color: #10b981; font-size: 0.95rem;">¿Deseas programar las cuotas para el mes entrante?</strong>
               <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;" id="recurringTargetDesc">
-                Se generarán las tareas de pago pendientes correspondientes.
+                Se generarán las tareas de pago pendientes correspondientes con los importes indicados arriba.
               </p>
             </div>
             <button type="button" class="btn btn-success" id="btnGenerateRecurring" onclick="handleGenerateNextMonthRecurring()">
@@ -706,6 +707,57 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="closeModal('modalRecurring')">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ==========================================================================
+       MODAL 6: ALTERAR PRECIO DE PAGO RECURRENTE (LUZ, AGUA, INTERNET VARIABLE)
+       ========================================================================== -->
+  <div class="modal-overlay" id="modalAdjustRecurringPrice">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title" style="color: #0891b2;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Alterar Precio de Servicio Recurrente
+        </h3>
+        <button type="button" class="modal-close-btn" onclick="closeModal('modalAdjustRecurringPrice')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.86rem; color: var(--text-muted); margin-bottom: 16px;">
+          Los recibos de <strong>luz, agua e internet</strong> no suelen ser fijos y varían según la facturación del mes. Modifica aquí el importe para que refleje el consumo real del recibo recibido.
+        </p>
+
+        <input type="hidden" id="adjustPriceDebtId" value="">
+
+        <div style="background: var(--bg-card-subtle); padding: 14px 16px; border-radius: var(--radius-md); border: 1px solid var(--border-medium); margin-bottom: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Proveedor / Servicio:</span>
+              <strong id="adjustPriceProvider" style="display: block; color: var(--text-heading); font-size: 1rem;">-</strong>
+              <span id="adjustPriceConcept" style="font-size: 0.8rem; color: var(--text-muted);">-</span>
+            </div>
+            <div style="text-align: right;">
+              <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Importe Anterior:</span>
+              <div id="adjustPriceCurrentAmount" style="font-size: 1.05rem; font-weight: 700; color: var(--text-muted);">S/ 0.00</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="inpAdjustNewAmount">Nuevo Importe del Recibo (S/)<span class="req">*</span></label>
+          <div style="position: relative;">
+            <span style="position: absolute; left: 12px; top: 11px; font-weight: 700; color: var(--text-muted);">S/</span>
+            <input type="number" id="inpAdjustNewAmount" class="form-input" style="padding-left: 36px; font-size: 1.15rem; font-weight: 800; color: #10b981;" step="0.01" min="0.01" max="1000000" placeholder="0.00" oninput="validateAmountInput(this)">
+          </div>
+          <span class="field-error" id="errAdjustNewAmount"></span>
+          <span style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; display: block;">Este cambio actualizará el Post-it y recalculará las métricas automáticamente.</span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modalAdjustRecurringPrice')">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="btnSaveAdjustedPrice" onclick="handleSaveAdjustedPrice()">Guardar Nuevo Precio</button>
       </div>
     </div>
   </div>

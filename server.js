@@ -406,6 +406,35 @@ const server = http.createServer(async (req, res) => {
         });
       }
 
+      // PUT /api/debts/:id/amount (Alterar monto de servicio recurrente u obligación pendiente)
+      const amountMatch = pathname.match(/^\/api\/debts\/([^/]+)\/amount$/);
+      if (amountMatch && method === 'PUT') {
+        const debtId = decodeURIComponent(amountMatch[1]);
+        const body = await parseBody(req);
+        const newAmount = Number(body.amount);
+        if (isNaN(newAmount) || newAmount <= 0 || newAmount > 1000000) {
+          return sendJson(res, 400, {
+            success: false,
+            message: 'El importe debe ser un número positivo menor o igual a S/ 1,000,000.00'
+          });
+        }
+        const debts = readDebts();
+        const index = debts.findIndex(d => d.id === debtId);
+        if (index === -1) {
+          return sendJson(res, 404, { success: false, message: 'Deuda no encontrada.' });
+        }
+        if (debts[index].status === 'Pagado') {
+          return sendJson(res, 400, { success: false, message: 'No se puede alterar el importe de una deuda que ya fue pagada.' });
+        }
+        debts[index].amount = Math.round(newAmount * 100) / 100;
+        writeDebts(debts);
+        return sendJson(res, 200, {
+          success: true,
+          message: 'Importe actualizado exitosamente.',
+          data: debts[index]
+        });
+      }
+
       // POST /api/debts/recurring/generate (Generar pagos recurrentes para el mes siguiente)
       if (pathname === '/api/debts/recurring/generate' && method === 'POST') {
         const body = await parseBody(req);
@@ -416,6 +445,8 @@ const server = http.createServer(async (req, res) => {
         if (targetMonth < '2026-10' || targetMonth > '2027-12') {
           return sendJson(res, 400, { success: false, message: 'El mes para generación recurrente debe estar entre 2026-10 y 2027-12.' });
         }
+
+        const customAmounts = (body.customAmounts && typeof body.customAmounts === 'object') ? body.customAmounts : {};
 
         const debts = readDebts();
         // Find existing recurring debts
@@ -434,7 +465,7 @@ const server = http.createServer(async (req, res) => {
         const existingInTarget = debts.filter(d => d.dueDate.startsWith(targetMonth));
         const created = [];
 
-        templates.forEach((template) => {
+        templates.forEach((template, key) => {
           const alreadyExists = existingInTarget.some(d =>
             d.provider === template.provider &&
             (d.recurringCategory === template.recurringCategory || d.concept === template.concept)
@@ -446,12 +477,26 @@ const server = http.createServer(async (req, res) => {
             const newDueDate = `${targetMonth}-${origDay}`;
             const newId = `PAY-${targetMonth.replace('-', '')}-${String(debts.length + created.length + 1).padStart(3, '0')}`;
 
+            // Allow custom variable amount from client input (ej. luz, agua, internet)
+            let itemAmount = template.amount;
+            if (customAmounts[key] !== undefined) {
+              const ca = Number(customAmounts[key]);
+              if (!isNaN(ca) && ca > 0 && ca <= 1000000) {
+                itemAmount = Math.round(ca * 100) / 100;
+              }
+            } else if (customAmounts[template.provider] !== undefined) {
+              const ca = Number(customAmounts[template.provider]);
+              if (!isNaN(ca) && ca > 0 && ca <= 1000000) {
+                itemAmount = Math.round(ca * 100) / 100;
+              }
+            }
+
             const generatedDebt = {
               id: newId,
               provider: template.provider,
               concept: `${template.recurringCategory || template.concept} (Cuota recurrente)`,
               category: template.category,
-              amount: template.amount,
+              amount: itemAmount,
               currency: template.currency || 'PEN',
               dueDate: newDueDate,
               priority: template.priority || 'Alta',
