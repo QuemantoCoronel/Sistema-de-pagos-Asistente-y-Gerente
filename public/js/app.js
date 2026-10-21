@@ -433,12 +433,13 @@ function updateMonthDisplay() {
 
   if (displayEl) displayEl.textContent = `${monthName} ${y}`;
   if (subEl) {
-    if (state.currentMonth === '2026-10') {
+    const currentActiveMonth = getTodayStr().slice(0, 7);
+    if (state.currentMonth === currentActiveMonth) {
       subEl.textContent = 'Periodo Actual';
-    } else if (state.currentMonth < '2026-10') {
+    } else if (state.currentMonth < currentActiveMonth) {
       subEl.textContent = 'Periodo Pasado (Historial)';
     } else {
-      subEl.textContent = 'Periodo Futuro (Programado)';
+      subEl.textContent = '';
     }
   }
 }
