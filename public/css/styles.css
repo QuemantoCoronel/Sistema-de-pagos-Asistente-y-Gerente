@@ -2059,3 +2059,117 @@ html, body {
     max-width: 95%;
   }
 }
+
+/* ==========================================================================
+   DISCREET GEAR BUTTON & POST-IT OPTIONS DROPDOWN
+   ========================================================================== */
+.gear-dropdown-container {
+  position: relative;
+  display: inline-block;
+}
+
+.btn-subtle-gear {
+  background: transparent;
+  border: 1px solid var(--border-medium);
+  color: var(--text-muted);
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+
+.btn-subtle-gear:hover {
+  color: var(--text-heading);
+  background: var(--bg-hover);
+  border-color: var(--border-focus);
+  transform: rotate(20deg);
+}
+
+.gear-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  min-width: 180px;
+  padding: 6px;
+  z-index: 1000;
+  animation: fadeInGearMenu 0.15s ease-out;
+}
+
+@keyframes fadeInGearMenu {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.gear-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  font-size: 0.83rem;
+  font-weight: 600;
+  color: var(--text-main);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.gear-menu-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-heading);
+}
+
+.gear-menu-item.danger {
+  color: #ef4444;
+}
+
+.gear-menu-item.danger:hover {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+
+.gear-menu-divider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 4px 0;
+}
+
+.btn-danger {
+  background: #dc2626;
+  color: #ffffff;
+  border: 1px solid #b91c1c;
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  font-weight: 700;
+  font-size: 0.86rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.btn-danger:hover {
+  background: #b91c1c;
+  border-color: #991b1b;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
+}
+

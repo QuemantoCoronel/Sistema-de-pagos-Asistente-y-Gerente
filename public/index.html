@@ -664,7 +664,26 @@
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
           Auditoría Documentaria: Boleta por Pagar vs Comprobante de Pago
         </h3>
-        <button type="button" class="modal-close-btn" onclick="closeModal('modalDocViewer')">&times;</button>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <!-- Discreet Gear Menu Button -->
+          <div class="gear-dropdown-container">
+            <button type="button" class="btn-subtle-gear" id="btnPostitGear" onclick="togglePostitGearMenu(event)" title="Opciones del Post-it (Editar o Borrar)">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            </button>
+            <div class="gear-dropdown-menu" id="postitGearDropdown" style="display: none;">
+              <button type="button" class="gear-menu-item" onclick="openEditPostitModal()">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                Editar Post-it
+              </button>
+              <div class="gear-menu-divider"></div>
+              <button type="button" class="gear-menu-item danger" onclick="openDeletePostitModal()">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                Borrar Post-it
+              </button>
+            </div>
+          </div>
+          <button type="button" class="modal-close-btn" onclick="closeModal('modalDocViewer')">&times;</button>
+        </div>
       </div>
       <div class="modal-body" id="viewerModalBody" style="padding: 18px 24px;">
         <div id="viewerContentArea">
@@ -722,7 +741,118 @@
 
 
 
-  <!-- Toast Notification Container -->
+  <!-- ==========================================================================
+       MODAL 6: EDITAR POST-IT
+       ========================================================================== -->
+  <div class="modal-overlay" id="modalEditDebt">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Editar Información del Post-it
+        </h3>
+        <button type="button" class="modal-close-btn" onclick="closeModal('modalEditDebt')">&times;</button>
+      </div>
+      <form id="formEditDebt" onsubmit="handleSaveEditDebt(event)">
+        <input type="hidden" id="editDebtId">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label" for="inpEditProvider">Proveedor o Entidad<span class="req">*</span></label>
+            <input type="text" id="inpEditProvider" class="form-input" required minlength="3" maxlength="100">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="inpEditConcept">Concepto o Descripción</label>
+            <input type="text" id="inpEditConcept" class="form-input" maxlength="200">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="inpEditAmount">Monto a Liquidar (S/)<span class="req">*</span></label>
+              <div style="position: relative;">
+                <span style="position: absolute; left: 12px; top: 11px; font-weight: 700; color: var(--text-muted);">S/</span>
+                <input type="number" id="inpEditAmount" class="form-input" style="padding-left: 36px; font-weight: 800;" step="0.01" min="0.10" max="1000000" required oninput="validateAmountInput(this)">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="inpEditDueDate">Fecha de Vencimiento<span class="req">*</span></label>
+              <input type="date" id="inpEditDueDate" class="form-input" min="2024-01-01" max="2027-12-31" oninput="validateYearDigits(this)" onblur="enforceDateBounds(this)" required>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="inpEditCategory">Categoría</label>
+              <select id="inpEditCategory" class="form-select">
+                <option value="Servicios Básicos">Servicios Básicos (Luz, Agua, etc.)</option>
+                <option value="Telecomunicaciones">Telecomunicaciones (Internet, Telefonía)</option>
+                <option value="Impuestos">Impuestos (SUNAT, Tributos)</option>
+                <option value="Proveedores">Proveedores de Mercadería / Insumos</option>
+                <option value="Alquileres">Alquileres y Mantenimiento</option>
+                <option value="Varios">Gastos Varios</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="inpEditPriority">Nivel de Prioridad</label>
+              <select id="inpEditPriority" class="form-select">
+                <option value="Alta">Alta</option>
+                <option value="Media">Media</option>
+                <option value="Baja">Baja</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modalEditDebt')">Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btnSaveEditDebt">Guardar Cambios</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ==========================================================================
+       MODAL 7: CONFIRMAR ELIMINACIÓN DE POST-IT
+       ========================================================================== -->
+  <div class="modal-overlay" id="modalConfirmDeleteDebt">
+    <div class="modal-content" style="max-width: 440px;">
+      <div class="modal-header" style="border-bottom-color: rgba(239, 68, 68, 0.2);">
+        <h3 class="modal-title" style="color: #ef4444;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          ¿Eliminar este Post-it?
+        </h3>
+        <button type="button" class="modal-close-btn" onclick="closeModal('modalConfirmDeleteDebt')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.9rem; color: var(--text-heading); margin-bottom: 14px;">
+          ¿De verdad deseas borrar permanentemente este registro?
+        </p>
+
+        <div style="background: var(--bg-card-subtle); padding: 14px; border-radius: 8px; border: 1px solid var(--border-medium); margin-bottom: 16px;">
+          <strong id="deleteDebtProvider" style="display: block; font-size: 1rem; color: var(--text-heading);">-</strong>
+          <span id="deleteDebtConcept" style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-top: 2px;">-</span>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border-subtle);">
+            <span id="deleteDebtDate" style="font-size: 0.78rem; color: var(--text-muted);">-</span>
+            <strong id="deleteDebtAmount" style="font-size: 1.05rem; color: #ef4444;">S/ 0.00</strong>
+          </div>
+        </div>
+
+        <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.25); padding: 10px 14px; border-radius: 6px; font-size: 0.78rem; color: #ef4444; line-height: 1.45;">
+          ⚠️ Esta acción eliminará la obligación del tablero y del sistema. Esta operación no se puede revertir.
+        </div>
+        <input type="hidden" id="deleteDebtId">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modalConfirmDeleteDebt')">Cancelar</button>
+        <button type="button" class="btn btn-danger" id="btnConfirmDeleteDebt" onclick="handleConfirmDeletePostit()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          Sí, Eliminar Post-it
+        </button>
+      </div>
+    </div>
+  </div>
   <div class="toast-container" id="toastContainer"></div>
 
   <!-- Core App Logic -->

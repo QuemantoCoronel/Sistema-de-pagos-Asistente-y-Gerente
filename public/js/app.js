@@ -283,6 +283,17 @@ function setupEventListeners() {
     });
   });
 
+  // Close gear menu when clicking outside
+  document.addEventListener('click', (e) => {
+    const gearBtn = document.getElementById('btnPostitGear');
+    const dropdown = document.getElementById('postitGearDropdown');
+    if (dropdown && dropdown.style.display !== 'none') {
+      if (!dropdown.contains(e.target) && (!gearBtn || !gearBtn.contains(e.target))) {
+        dropdown.style.display = 'none';
+      }
+    }
+  });
+
   // Draft persistence for new debt modal (D03)
   const formNewDebt = document.getElementById('formNewDebt');
   if (formNewDebt) {
@@ -1748,6 +1759,10 @@ function openDualDocumentViewer(debtId) {
   const debt = state.debts.find(d => d.id === debtId);
   if (!debt) return;
 
+  currentViewerDebtId = debtId;
+  const gearMenu = document.getElementById('postitGearDropdown');
+  if (gearMenu) gearMenu.style.display = 'none';
+
   const isPaid = debt.status === 'Pagado';
   const hasReceipt = debt.receipts && debt.receipts.length > 0;
   const receipt = hasReceipt ? debt.receipts[0] : null;
@@ -1981,6 +1996,150 @@ function displayDocumentViewer({ title, fileName, fileUrl, fileType, meta, extra
   }
 
   openModal('modalDocViewer');
+}
+
+// ==========================================================================
+// OPCIONES DEL POST-IT: EDITAR Y BORRAR CON CONFIRMACIÓN
+// ==========================================================================
+let currentViewerDebtId = null;
+
+function togglePostitGearMenu(e) {
+  if (e) {
+    e.stopPropagation();
+    e.preventDefault();
+  }
+  const dropdown = document.getElementById('postitGearDropdown');
+  if (dropdown) {
+    dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+  }
+}
+
+function openEditPostitModal(debtId) {
+  const id = debtId || currentViewerDebtId;
+  const debt = state.debts.find(d => d.id === id);
+  if (!debt) return;
+
+  const dropdown = document.getElementById('postitGearDropdown');
+  if (dropdown) dropdown.style.display = 'none';
+
+  document.getElementById('editDebtId').value = debt.id;
+  document.getElementById('inpEditProvider').value = debt.provider || '';
+  document.getElementById('inpEditConcept').value = debt.concept || '';
+  document.getElementById('inpEditAmount').value = Number(debt.amount).toFixed(2);
+  document.getElementById('inpEditDueDate').value = debt.dueDate || '';
+  document.getElementById('inpEditCategory').value = debt.category || 'Servicios Básicos';
+  document.getElementById('inpEditPriority').value = debt.priority || 'Media';
+
+  openModal('modalEditDebt');
+}
+
+async function handleSaveEditDebt(e) {
+  e.preventDefault();
+  const debtId = document.getElementById('editDebtId').value;
+  const provider = document.getElementById('inpEditProvider').value.trim();
+  const concept = document.getElementById('inpEditConcept').value.trim();
+  const amount = parseFloat(document.getElementById('inpEditAmount').value);
+  const dueDate = document.getElementById('inpEditDueDate').value;
+  const category = document.getElementById('inpEditCategory').value;
+  const priority = document.getElementById('inpEditPriority').value;
+
+  if (!provider || isNaN(amount) || amount <= 0 || !dueDate) {
+    showToast('Por favor completa todos los campos obligatorios.', 'error');
+    return;
+  }
+
+  const payload = {
+    provider,
+    concept: concept || 'Pago de cuentas por pagar',
+    amount: Math.round(amount * 100) / 100,
+    dueDate,
+    category,
+    priority
+  };
+
+  try {
+    const res = await fetch(`/api/debts/${encodeURIComponent(debtId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (res.ok) {
+      const idx = state.debts.findIndex(d => d.id === debtId);
+      if (idx !== -1) {
+        state.debts[idx] = { ...state.debts[idx], ...payload };
+      }
+      saveLocalFallback(state.debts);
+      closeModal('modalEditDebt');
+      showToast('Cambios guardados exitosamente en el Post-it.', 'success');
+
+      // Update viewer with updated data
+      openDualDocumentViewer(debtId);
+      applyFiltersAndRender();
+      updateSummaryKPIs();
+    } else {
+      throw new Error();
+    }
+  } catch {
+    const idx = state.debts.findIndex(d => d.id === debtId);
+    if (idx !== -1) {
+      state.debts[idx] = { ...state.debts[idx], ...payload };
+    }
+    saveLocalFallback(state.debts);
+    closeModal('modalEditDebt');
+    showToast('Cambios guardados localmente.', 'success');
+    openDualDocumentViewer(debtId);
+    applyFiltersAndRender();
+    updateSummaryKPIs();
+  }
+}
+
+function openDeletePostitModal(debtId) {
+  const id = debtId || currentViewerDebtId;
+  const debt = state.debts.find(d => d.id === id);
+  if (!debt) return;
+
+  const dropdown = document.getElementById('postitGearDropdown');
+  if (dropdown) dropdown.style.display = 'none';
+
+  document.getElementById('deleteDebtId').value = debt.id;
+  document.getElementById('deleteDebtProvider').textContent = debt.provider;
+  document.getElementById('deleteDebtConcept').textContent = debt.concept;
+  document.getElementById('deleteDebtDate').textContent = `Vencimiento: ${formatDate(debt.dueDate)}`;
+  document.getElementById('deleteDebtAmount').textContent = `${debt.currency || 'S/'} ${formatMoney(debt.amount)}`;
+
+  openModal('modalConfirmDeleteDebt');
+}
+
+async function handleConfirmDeletePostit() {
+  const debtId = document.getElementById('deleteDebtId').value;
+  if (!debtId) return;
+
+  try {
+    const res = await fetch(`/api/debts/${encodeURIComponent(debtId)}`, {
+      method: 'DELETE'
+    });
+
+    if (res.ok) {
+      state.debts = state.debts.filter(d => d.id !== debtId);
+      saveLocalFallback(state.debts);
+      closeModal('modalConfirmDeleteDebt');
+      closeModal('modalDocViewer');
+      showToast('Post-it eliminado correctamente.', 'success');
+      applyFiltersAndRender();
+      updateSummaryKPIs();
+    } else {
+      throw new Error();
+    }
+  } catch {
+    state.debts = state.debts.filter(d => d.id !== debtId);
+    saveLocalFallback(state.debts);
+    closeModal('modalConfirmDeleteDebt');
+    closeModal('modalDocViewer');
+    showToast('Post-it eliminado.', 'info');
+    applyFiltersAndRender();
+    updateSummaryKPIs();
+  }
 }
 
 // ==========================================================================

@@ -440,6 +440,56 @@ const server = http.createServer(async (req, res) => {
         });
       }
 
+      // PUT /api/debts/:id (Editar campos del Post-it)
+      const editDebtMatch = pathname.match(/^\/api\/debts\/([^/]+)$/);
+      if (editDebtMatch && method === 'PUT') {
+        const debtId = decodeURIComponent(editDebtMatch[1]);
+        const body = await parseBody(req);
+        const debts = readDebts();
+        const index = debts.findIndex(d => d.id === debtId);
+        if (index === -1) {
+          return sendJson(res, 404, { success: false, message: 'Deuda no encontrada.' });
+        }
+
+        if (body.provider) {
+          const provider = String(body.provider).trim();
+          if (provider.length >= 3 && provider.length <= 100) {
+            debts[index].provider = provider;
+          }
+        }
+        if (body.concept !== undefined) {
+          debts[index].concept = String(body.concept).trim().substring(0, 200);
+        }
+        if (body.category !== undefined) {
+          debts[index].category = String(body.category).trim().substring(0, 60);
+        }
+        if (body.priority && ['Alta', 'Media', 'Baja'].includes(body.priority)) {
+          debts[index].priority = body.priority;
+        }
+        if (body.amount !== undefined) {
+          const amt = parseFloat(body.amount);
+          if (!isNaN(amt) && amt >= 0.10 && amt <= 1000000.00) {
+            debts[index].amount = Math.round(amt * 100) / 100;
+          }
+        }
+        if (body.dueDate) {
+          const dueMatch = String(body.dueDate).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+          if (dueMatch) {
+            const dueYear = parseInt(dueMatch[1], 10);
+            if (dueYear >= 2024 && dueYear <= 2027 && body.dueDate <= '2027-12-31') {
+              debts[index].dueDate = body.dueDate;
+            }
+          }
+        }
+
+        writeDebts(debts);
+        return sendJson(res, 200, {
+          success: true,
+          message: 'Post-it actualizado exitosamente.',
+          data: debts[index]
+        });
+      }
+
       // POST /api/debts/recurring/generate (Generar pagos recurrentes para el mes siguiente)
       if (pathname === '/api/debts/recurring/generate' && method === 'POST') {
         const body = await parseBody(req);
