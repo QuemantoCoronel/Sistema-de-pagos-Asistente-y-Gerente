@@ -1249,6 +1249,12 @@ function openNewDebtModal() {
 
   state.selectedReceiptFile = null;
   document.getElementById('receiptPreviewContainer').innerHTML = '';
+  document.getElementById('fileReceipt').value = '';
+  const dropzoneReceipt = document.getElementById('dropzoneReceipt');
+  if (dropzoneReceipt) dropzoneReceipt.classList.add('required-missing');
+  const errReceipt = document.getElementById('errReceiptRequired');
+  if (errReceipt) errReceipt.style.display = 'none';
+
   document.getElementById('formNewDebt').reset();
   document.getElementById('groupRecurringCategory').style.display = 'none';
   document.querySelectorAll('#formNewDebt .input-error').forEach(el => el.classList.remove('input-error'));
@@ -1277,6 +1283,11 @@ function handleFileReceiptSelect(input) {
       dataUrl: e.target.result
     };
 
+    const dropzoneReceipt = document.getElementById('dropzoneReceipt');
+    if (dropzoneReceipt) dropzoneReceipt.classList.remove('required-missing');
+    const errReceipt = document.getElementById('errReceiptRequired');
+    if (errReceipt) errReceipt.style.display = 'none';
+
     const container = document.getElementById('receiptPreviewContainer');
     container.innerHTML = `
       <div class="file-preview-pill">
@@ -1296,6 +1307,8 @@ function removeSelectedReceipt() {
   state.selectedReceiptFile = null;
   document.getElementById('fileReceipt').value = '';
   document.getElementById('receiptPreviewContainer').innerHTML = '';
+  const dropzoneReceipt = document.getElementById('dropzoneReceipt');
+  if (dropzoneReceipt) dropzoneReceipt.classList.add('required-missing');
 }
 
 async function handleCreateDebt(e) {
@@ -1346,17 +1359,28 @@ async function handleCreateDebt(e) {
   }
   document.getElementById('inpDueDate').classList.remove('input-error');
 
-  const receipts = [];
-  if (state.selectedReceiptFile) {
-    receipts.push({
-      id: 'rec-' + Date.now(),
-      name: state.selectedReceiptFile.name,
-      type: state.selectedReceiptFile.type,
-      size: state.selectedReceiptFile.size,
-      url: state.selectedReceiptFile.dataUrl,
-      uploadDate: new Date().toISOString().substring(0, 10)
-    });
+  // Strict Requirement: Factura o recibo obligatorio (PDF o Imagen)
+  if (!state.selectedReceiptFile || (!state.selectedReceiptFile.dataUrl && !state.selectedReceiptFile.url)) {
+    const dropzoneReceipt = document.getElementById('dropzoneReceipt');
+    const errReceipt = document.getElementById('errReceiptRequired');
+    if (dropzoneReceipt) {
+      dropzoneReceipt.classList.add('required-missing');
+      dropzoneReceipt.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    if (errReceipt) errReceipt.style.display = 'block';
+    showToast('Requisito obligatorio: Debes adjuntar la factura, boleta o recibo (PDF o Imagen) para crear el post-it.', 'error');
+    return;
   }
+
+  const receipts = [];
+  receipts.push({
+    id: 'rec-' + Date.now(),
+    name: state.selectedReceiptFile.name,
+    type: state.selectedReceiptFile.type,
+    size: state.selectedReceiptFile.size,
+    url: state.selectedReceiptFile.dataUrl,
+    uploadDate: new Date().toISOString().substring(0, 10)
+  });
 
   const payload = {
     provider,

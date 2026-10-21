@@ -267,6 +267,21 @@ const server = http.createServer(async (req, res) => {
           });
         }
 
+        // Strict Requirement: Factura o recibo obligatorio (PDF o Imagen)
+        if (!body.receipts || !Array.isArray(body.receipts) || body.receipts.length === 0) {
+          return sendJson(res, 400, {
+            success: false,
+            message: 'Requisito obligatorio: Debe adjuntar la factura, boleta o recibo contable (PDF o Imagen) para crear el post-it.'
+          });
+        }
+        const firstReceipt = body.receipts[0];
+        if (!firstReceipt || (!firstReceipt.url && !firstReceipt.dataUrl)) {
+          return sendJson(res, 400, {
+            success: false,
+            message: 'El archivo de la factura o boleta es obligatorio y debe contener un formato válido.'
+          });
+        }
+
         const debts = readDebts();
         const { limaDate } = getSystemDateStrings();
         const newId = 'PAY-' + body.dueDate.replace(/-/g, '').substring(0, 6) + '-' + String(debts.length + 1).padStart(3, '0');
