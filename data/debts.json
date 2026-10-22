@@ -21,7 +21,11 @@
         "type": "application/pdf",
         "url": "/uploads/recibo_sedapal.pdf",
         "size": "18 KB",
-        "uploadDate": "2026-10-08"
+        "uploadDate": "2026-10-08",
+        "fileHash": "6d33d1fd4b21fae42533480d77ee7272041aefa4c20689c0d6f1fe6a34798934",
+        "verifiedBelongs": true,
+        "recipientCompany": "TechSolutions Perú S.A.C.",
+        "recipientRuc": "20601827361"
       }
     ],
     "payment": null,
@@ -49,7 +53,11 @@
         "type": "application/pdf",
         "url": "/uploads/recibo_luz_enel.pdf",
         "size": "22 KB",
-        "uploadDate": "2026-10-10"
+        "uploadDate": "2026-10-10",
+        "fileHash": "aa9b449944d5f95e31fe72916c6ce77047177efe0623d6af069cba8e6dddf4c4",
+        "verifiedBelongs": true,
+        "recipientCompany": "TechSolutions Perú S.A.C.",
+        "recipientRuc": "20601827361"
       }
     ],
     "payment": null,
@@ -67,9 +75,9 @@
     "status": "Pendiente",
     "isRecurring": false,
     "recurringCategory": null,
-    "assignedTo": "Gerente",
-    "managerAssumed": true,
-    "managerAssumptionReason": "Coordinación directa de Gerencia General por motivos de confidencialidad y negociación estratégica.",
+    "assignedTo": "Asistente",
+    "managerAssumed": false,
+    "managerAssumptionReason": "",
     "receipts": [
       {
         "id": "rec-003",
@@ -77,7 +85,11 @@
         "type": "application/pdf",
         "url": "/uploads/factura_sunat.pdf",
         "size": "35 KB",
-        "uploadDate": "2026-10-14"
+        "uploadDate": "2026-10-14",
+        "fileHash": "3801620b0d7e1b2315dba7ab82602b0caa926005778e52030ccb35ffa7249137",
+        "verifiedBelongs": true,
+        "recipientCompany": "TechSolutions Perú S.A.C.",
+        "recipientRuc": "20601827361"
       }
     ],
     "payment": null,
@@ -105,7 +117,11 @@
         "type": "application/pdf",
         "url": "/uploads/factura_movistar.pdf",
         "size": "28 KB",
-        "uploadDate": "2026-10-11"
+        "uploadDate": "2026-10-11",
+        "fileHash": "2be42bddd9336e68c702cd4fe88d14fafa58d659b23d4c75067d03a38078a14e",
+        "verifiedBelongs": true,
+        "recipientCompany": "TechSolutions Perú S.A.C.",
+        "recipientRuc": "20601827361"
       }
     ],
     "payment": null,
@@ -133,7 +149,11 @@
         "type": "application/pdf",
         "url": "/uploads/factura_papelera.pdf",
         "size": "19 KB",
-        "uploadDate": "2026-10-14"
+        "uploadDate": "2026-10-14",
+        "fileHash": "5b2159ea0bc913aa17a0664768fa25ecf9b26a82edb53279bd3ab47552e25357",
+        "verifiedBelongs": true,
+        "recipientCompany": "TechSolutions Perú S.A.C.",
+        "recipientRuc": "20601827361"
       }
     ],
     "payment": null,
@@ -161,7 +181,11 @@
         "type": "application/pdf",
         "url": "/uploads/comprobante_alquiler_banco.pdf",
         "size": "45 KB",
-        "uploadDate": "2026-10-02"
+        "uploadDate": "2026-10-02",
+        "fileHash": "a32a5718d845319a834376dbc85efcb8a1ae6f40650d176e97847c268224a426",
+        "verifiedBelongs": true,
+        "recipientCompany": "TechSolutions Perú S.A.C.",
+        "recipientRuc": "20601827361"
       }
     ],
     "payment": {
@@ -172,7 +196,11 @@
       "proofFile": {
         "name": "Constancia_Transferencia_BCP_5500.pdf",
         "type": "application/pdf",
-        "url": "/uploads/comprobante_alquiler_banco.pdf"
+        "url": "/uploads/comprobante_alquiler_banco.pdf",
+        "fileHash": "a32a5718d845319a834376dbc85efcb8a1ae6f40650d176e97847c268224a426",
+        "verifiedBelongs": true,
+        "recipientCompany": "TechSolutions Perú S.A.C.",
+        "recipientRuc": "20601827361"
       },
       "cashControl": null,
       "notes": "Transferido a la cuenta corriente BCP del arrendador."
@@ -201,7 +229,11 @@
         "type": "application/pdf",
         "url": "/uploads/vale_caja_chica_limpieza.pdf",
         "size": "14 KB",
-        "uploadDate": "2026-10-05"
+        "uploadDate": "2026-10-05",
+        "fileHash": "b1261c67cafc800176f48bccee74584d46ff01a5fe350fa2bbdf9415e0725108",
+        "verifiedBelongs": true,
+        "recipientCompany": "TechSolutions Perú S.A.C.",
+        "recipientRuc": "20601827361"
       }
     ],
     "payment": {
@@ -212,7 +244,11 @@
       "proofFile": {
         "name": "Vale_Caja_Chica_Firmado_380.pdf",
         "type": "application/pdf",
-        "url": "/uploads/vale_caja_chica_limpieza.pdf"
+        "url": "/uploads/vale_caja_chica_limpieza.pdf",
+        "fileHash": "b1261c67cafc800176f48bccee74584d46ff01a5fe350fa2bbdf9415e0725108",
+        "verifiedBelongs": true,
+        "recipientCompany": "TechSolutions Perú S.A.C.",
+        "recipientRuc": "20601827361"
       },
       "cashControl": {
         "cashVoucherNumber": "VALE-CC-1049",
@@ -246,7 +282,11 @@
         "type": "application/pdf",
         "url": "/uploads/factura_movistar.pdf",
         "size": "30 KB",
-        "uploadDate": "2026-10-15"
+        "uploadDate": "2026-10-15",
+        "fileHash": "2be42bddd9336e68c702cd4fe88d14fafa58d659b23d4c75067d03a38078a14e",
+        "verifiedBelongs": true,
+        "recipientCompany": "TechSolutions Perú S.A.C.",
+        "recipientRuc": "20601827361"
       }
     ],
     "payment": null,
@@ -274,7 +314,11 @@
         "type": "application/pdf",
         "url": "/uploads/factura_movistar.pdf",
         "size": "42 KB",
-        "uploadDate": "2026-10-17"
+        "uploadDate": "2026-10-17",
+        "fileHash": "2be42bddd9336e68c702cd4fe88d14fafa58d659b23d4c75067d03a38078a14e",
+        "verifiedBelongs": true,
+        "recipientCompany": "TechSolutions Perú S.A.C.",
+        "recipientRuc": "20601827361"
       }
     ],
     "payment": null,
@@ -359,7 +403,11 @@
         "type": "application/pdf",
         "url": "/uploads/comprobante_alquiler_banco.pdf",
         "size": "38 KB",
-        "uploadDate": "2026-09-01"
+        "uploadDate": "2026-09-01",
+        "fileHash": "a32a5718d845319a834376dbc85efcb8a1ae6f40650d176e97847c268224a426",
+        "verifiedBelongs": true,
+        "recipientCompany": "TechSolutions Perú S.A.C.",
+        "recipientRuc": "20601827361"
       }
     ],
     "payment": {
@@ -370,7 +418,11 @@
       "proofFile": {
         "name": "Constancia_BCP_Setiembre.pdf",
         "type": "application/pdf",
-        "url": "/uploads/comprobante_alquiler_banco.pdf"
+        "url": "/uploads/comprobante_alquiler_banco.pdf",
+        "fileHash": "a32a5718d845319a834376dbc85efcb8a1ae6f40650d176e97847c268224a426",
+        "verifiedBelongs": true,
+        "recipientCompany": "TechSolutions Perú S.A.C.",
+        "recipientRuc": "20601827361"
       },
       "cashControl": null,
       "notes": "Cancelado oportunamente sin mora."
@@ -399,7 +451,11 @@
         "type": "application/pdf",
         "url": "/uploads/recibo_sedapal.pdf",
         "size": "20 KB",
-        "uploadDate": "2026-09-10"
+        "uploadDate": "2026-09-10",
+        "fileHash": "6d33d1fd4b21fae42533480d77ee7272041aefa4c20689c0d6f1fe6a34798934",
+        "verifiedBelongs": true,
+        "recipientCompany": "TechSolutions Perú S.A.C.",
+        "recipientRuc": "20601827361"
       }
     ],
     "payment": {
@@ -410,7 +466,11 @@
       "proofFile": {
         "name": "Vale_Caja_Chica_Sedapal_Set.pdf",
         "type": "application/pdf",
-        "url": "/uploads/vale_caja_chica_limpieza.pdf"
+        "url": "/uploads/vale_caja_chica_limpieza.pdf",
+        "fileHash": "b1261c67cafc800176f48bccee74584d46ff01a5fe350fa2bbdf9415e0725108",
+        "verifiedBelongs": true,
+        "recipientCompany": "TechSolutions Perú S.A.C.",
+        "recipientRuc": "20601827361"
       },
       "cashControl": {
         "cashVoucherNumber": "VALE-CC-0994",
@@ -444,7 +504,11 @@
         "type": "application/pdf",
         "url": "/uploads/recibo_luz_enel.pdf",
         "size": "22 KB",
-        "uploadDate": "2026-09-12"
+        "uploadDate": "2026-09-12",
+        "fileHash": "aa9b449944d5f95e31fe72916c6ce77047177efe0623d6af069cba8e6dddf4c4",
+        "verifiedBelongs": true,
+        "recipientCompany": "TechSolutions Perú S.A.C.",
+        "recipientRuc": "20601827361"
       }
     ],
     "payment": {
@@ -455,49 +519,15 @@
       "proofFile": {
         "name": "Comprobante_BBVA_Enel_Set.pdf",
         "type": "application/pdf",
-        "url": "/uploads/recibo_luz_enel.pdf"
+        "url": "/uploads/recibo_luz_enel.pdf",
+        "fileHash": "aa9b449944d5f95e31fe72916c6ce77047177efe0623d6af069cba8e6dddf4c4",
+        "verifiedBelongs": true,
+        "recipientCompany": "TechSolutions Perú S.A.C.",
+        "recipientRuc": "20601827361"
       },
       "cashControl": null,
       "notes": "Pago por banca empresarial BBVA."
     },
     "createdAt": "2026-09-12"
-  },
-  {
-    "id": "PAY-202611-017",
-    "provider": "Telefónica del Perú S.A.A.",
-    "concept": "Internet / Teléfono (Cuota recurrente)",
-    "category": "Telecomunicaciones",
-    "amount": 920,
-    "currency": "PEN",
-    "dueDate": "2026-11-23",
-    "priority": "Media",
-    "status": "Pendiente",
-    "isRecurring": true,
-    "recurringCategory": "Internet / Teléfono",
-    "assignedTo": "Asistente",
-    "managerAssumed": false,
-    "managerAssumptionReason": "",
-    "receipts": [],
-    "payment": null,
-    "createdAt": "2026-10-19"
-  },
-  {
-    "id": "PAY-202611-018",
-    "provider": "Consorcio Jurídico & Asociados",
-    "concept": "Legal (Cuota recurrente)",
-    "category": "Servicios Profesionales",
-    "amount": 2800,
-    "currency": "PEN",
-    "dueDate": "2026-11-28",
-    "priority": "Alta",
-    "status": "Pendiente",
-    "isRecurring": true,
-    "recurringCategory": "Legal",
-    "assignedTo": "Asistente",
-    "managerAssumed": false,
-    "managerAssumptionReason": "",
-    "receipts": [],
-    "payment": null,
-    "createdAt": "2026-10-19"
   }
 ]

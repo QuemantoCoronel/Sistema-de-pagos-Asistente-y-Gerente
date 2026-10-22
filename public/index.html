@@ -403,6 +403,8 @@
               ⚠️ Debes adjuntar la factura, boleta o recibo para poder registrar la obligación.
             </span>
             <div id="receiptPreviewContainer"></div>
+            <!-- Live Security & Ownership Audit Panel -->
+            <div id="receiptAuditBox" style="display: none; margin-top: 10px;"></div>
           </div>
 
         </div>
@@ -471,8 +473,9 @@
           <div id="transferControlsGroup">
             <div class="form-row">
               <div class="form-group">
-                <label class="form-label" for="inpTransferRef">N° de Operación / Referencia Bancaria</label>
-                <input type="text" id="inpTransferRef" class="form-input" placeholder="Ej. BCP-OPE-992384" minlength="3" maxlength="50">
+                <label class="form-label" for="inpTransferRef">N° de Operación / Referencia Bancaria<span class="req">*</span></label>
+                <input type="text" id="inpTransferRef" class="form-input" placeholder="Ej. BCP-OPE-992384" minlength="3" maxlength="50" oninput="validateReferenceRealtime(this.value, 'Transferencia')">
+                <div id="feedbackTransferRef" class="ref-validation-feedback" style="display: none;"></div>
               </div>
               <div class="form-group">
                 <label class="form-label" for="inpPayDate">Fecha del Pago</label>
@@ -491,7 +494,8 @@
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label" for="inpCashVoucher">N° de Recibo<span class="req">*</span></label>
-                <input type="text" id="inpCashVoucher" class="form-input" placeholder="Ej. REC-2186" minlength="2" maxlength="30">
+                <input type="text" id="inpCashVoucher" class="form-input" placeholder="Ej. REC-2186" minlength="2" maxlength="30" oninput="validateReferenceRealtime(this.value, 'Efectivo')">
+                <div id="feedbackCashVoucher" class="ref-validation-feedback" style="display: none;"></div>
               </div>
               <div class="form-group">
                 <label class="form-label" for="inpCashCustodian">Custodio</label>
@@ -518,9 +522,12 @@
 
           <!-- MANDATORY PROOF UPLOAD -->
           <div class="form-group" style="margin-top: 18px;">
-            <label class="form-label" style="display: flex; justify-content: space-between;">
+            <label class="form-label" style="display: flex; justify-content: space-between; align-items: center;">
               <span>Comprobante de Pago Obligatorio (PDF o Imagen)<span class="req">*</span></span>
-              <span style="color: #ef4444; font-weight: 700; font-size: 0.74rem;">[REQUISITO EXIGIDO]</span>
+              <span class="badge-pill indigo" style="font-size: 0.72rem; padding: 3px 8px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 3px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                Auditoría Criptográfica SHA-256
+              </span>
             </label>
             <div class="upload-dropzone required-missing" id="dropzonePaymentProof" onclick="document.getElementById('filePaymentProof').click()">
               <input type="file" id="filePaymentProof" accept="image/*,.pdf" style="display: none;" onchange="handleFilePaymentProofSelect(this)" required>
@@ -531,10 +538,12 @@
                 Adjunta aquí la constancia bancaria o recibo de caja firmado
               </p>
               <p style="font-size: 0.76rem; color: var(--text-muted); margin-top: 3px;">
-                El sistema NO permitirá marcar como pagado sin adjuntar este archivo.
+                El sistema valida automáticamente que el archivo pertenezca a TechSolutions Perú S.A.C. y que no haya sido subido previamente.
               </p>
             </div>
             <div id="paymentProofPreviewContainer"></div>
+            <!-- Live Security & Ownership Audit Panel -->
+            <div id="proofAuditBox" style="display: none; margin-top: 10px;"></div>
           </div>
 
           <div class="form-group">

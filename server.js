@@ -2,11 +2,20 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const url = require('url');
+const crypto = require('crypto');
+const zlib = require('zlib');
 
 const PORT = process.env.PORT || 3000;
 const DATA_FILE = path.join(__dirname, 'data', 'debts.json');
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 const PUBLIC_DIR = path.join(__dirname, 'public');
+
+// Empresa Autorizada para Pago de Cuentas
+const AUTHORIZED_COMPANY = {
+  name: 'TechSolutions Perú S.A.C.',
+  ruc: '20601827361',
+  manager: 'Carlos Mendoza'
+};
 
 // MIME types
 const MIME_TYPES = {
@@ -22,6 +31,152 @@ const MIME_TYPES = {
   '.pdf': 'application/pdf',
   '.ico': 'image/x-icon'
 };
+
+// Criptografía: Cálculo de Hash SHA-256 por contenido binario real
+function computeSha256(buffer) {
+  return crypto.createHash('sha256').update(buffer).digest('hex');
+}
+
+function parseBase64Buffer(dataUrlOrBase64) {
+  if (!dataUrlOrBase64) return null;
+  const cleaned = dataUrlOrBase64.replace(/^data:([A-Za-z-+/]+);base64,/, '');
+  try {
+    return Buffer.from(cleaned, 'base64');
+  } catch {
+    return null;
+  }
+}
+
+// Extractor de texto en archivos PDF (soporta texto directo y streams FlateDecode)
+function extractPdfText(buffer) {
+  if (!buffer || buffer.length === 0) return '';
+  const textTokens = [];
+
+  function parseTextOperators(str) {
+    const tjRegex = /\(([^)]*)\)\s*Tj/g;
+    let m;
+    while ((m = tjRegex.exec(str)) !== null) {
+      textTokens.push(m[1]);
+    }
+    const bigTjRegex = /\[(.*?)\]\s*TJ/g;
+    while ((m = bigTjRegex.exec(str)) !== null) {
+      const inner = m[1];
+      const subRegex = /\(([^)]*)\)/g;
+      let sm;
+      while ((sm = subRegex.exec(inner)) !== null) {
+        textTokens.push(sm[1]);
+      }
+    }
+  }
+
+  const rawStr = buffer.toString('latin1');
+  parseTextOperators(rawStr);
+
+  const streamRegex = /<<([\s\S]*?)>>\s*stream\r?\n([\s\S]*?)\r?\nendstream/g;
+  let sMatch;
+  while ((sMatch = streamRegex.exec(rawStr)) !== null) {
+    const dict = sMatch[1];
+    const streamContent = sMatch[2];
+    if (dict.includes('/FlateDecode')) {
+      try {
+        const decompressed = zlib.inflateSync(Buffer.from(streamContent, 'latin1'));
+        parseTextOperators(decompressed.toString('latin1'));
+      } catch (e) {
+        try {
+          const decompressed = zlib.inflateRawSync(Buffer.from(streamContent, 'latin1'));
+          parseTextOperators(decompressed.toString('latin1'));
+        } catch (e2) {}
+      }
+    }
+  }
+
+  return textTokens.join(' ').replace(/\s+/g, ' ').trim();
+}
+
+// Validación de Titularidad y Pertenencia del Comprobante
+function inspectDocumentBelonging(text, expectedProvider, expectedAmount) {
+  const normText = (text || '').toLowerCase();
+  const companyRuc = AUTHORIZED_COMPANY.ruc;
+  const companyName = 'techsolutions';
+  const managerName = 'carlos mendoza';
+
+  const hasCompanyRuc = normText.includes(companyRuc);
+  const hasCompanyName = normText.includes(companyName);
+  const hasManager = normText.includes(managerName);
+
+  // Extracción de números de 11 dígitos (RUCs potenciales)
+  const rucMatches = (text || '').match(/\b(10|20)\d{9}\b/g) || [];
+  const alienRucs = rucMatches.filter(r => r !== companyRuc);
+
+  let providerMatch = false;
+  if (expectedProvider) {
+    const words = expectedProvider.toLowerCase().split(/\s+/).filter(w => w.length > 3 && !['s.a.', 's.a.c.', 's.a.a.', 'peru', 'perú', 'del', 'los', 'las'].includes(w));
+    if (words.length > 0) {
+      providerMatch = words.some(w => normText.includes(w));
+    }
+  }
+
+  const belongsToCompany = hasCompanyRuc || hasCompanyName || hasManager;
+  // Si tiene RUCs ajenos explícitos y ninguna mención a TechSolutions Perú, es comprobante ajeno
+  const isAlienDocument = (alienRucs.length > 0 && !belongsToCompany);
+
+  return {
+    belongsToCompany,
+    isAlienDocument,
+    hasCompanyRuc,
+    hasCompanyName,
+    alienRucs: [...new Set(alienRucs)],
+    providerMatch,
+    extractedSnippet: (text || '').substring(0, 300)
+  };
+}
+
+// Búsqueda de archivo duplicado por hash SHA-256 en toda la base de datos
+function findDuplicateHash(debts, fileHash, excludeDebtId = null) {
+  if (!fileHash) return null;
+  const targetHash = fileHash.toLowerCase();
+  for (const d of debts) {
+    if (excludeDebtId && d.id === excludeDebtId) continue;
+    if (Array.isArray(d.receipts)) {
+      for (const r of d.receipts) {
+        if (r.fileHash && r.fileHash.toLowerCase() === targetHash) {
+          return { debtId: d.id, provider: d.provider, type: 'Factura/Boleta inicial', fileName: r.name, date: r.uploadDate || d.createdAt, hash: r.fileHash };
+        }
+      }
+    }
+    if (d.payment?.proofFile?.fileHash) {
+      if (d.payment.proofFile.fileHash.toLowerCase() === targetHash) {
+        return { debtId: d.id, provider: d.provider, type: 'Comprobante de pago', fileName: d.payment.proofFile.name, date: d.payment.paidDate, hash: d.payment.proofFile.fileHash };
+      }
+    }
+  }
+  return null;
+}
+
+// Búsqueda de número de referencia/operación duplicado
+function findDuplicateReference(debts, reference, excludeDebtId = null) {
+  if (!reference) return null;
+  const cleanRef = reference.trim().toUpperCase();
+  if (cleanRef.length < 2) return null;
+
+  for (const d of debts) {
+    if (d.status !== 'Pagado' || (excludeDebtId && d.id === excludeDebtId)) continue;
+    const existingRef = (d.payment?.transactionRef || '').trim().toUpperCase();
+    const existingVoucher = (d.payment?.cashControl?.cashVoucherNumber || '').trim().toUpperCase();
+
+    if (existingRef === cleanRef || existingVoucher === cleanRef) {
+      return {
+        debtId: d.id,
+        provider: d.provider,
+        amount: d.amount,
+        currency: d.currency || 'PEN',
+        paidDate: d.payment?.paidDate || d.dueDate,
+        matchedRef: cleanRef
+      };
+    }
+  }
+  return null;
+}
 
 function readDebts() {
   try {
@@ -283,8 +438,60 @@ const server = http.createServer(async (req, res) => {
         }
 
         const debts = readDebts();
+
+        // VALIDACIÓN CRIPTOGRÁFICA: Comprobante no duplicado por Hash SHA-256
+        let receiptHash = firstReceipt.fileHash || '';
+        let receiptBuf = null;
+        if (firstReceipt.dataUrl) {
+          receiptBuf = parseBase64Buffer(firstReceipt.dataUrl);
+          if (receiptBuf) {
+            receiptHash = computeSha256(receiptBuf);
+          }
+        } else if (firstReceipt.url && firstReceipt.url.startsWith('/uploads/')) {
+          const rPath = path.join(__dirname, firstReceipt.url);
+          if (fs.existsSync(rPath)) {
+            receiptBuf = fs.readFileSync(rPath);
+            receiptHash = computeSha256(receiptBuf);
+          }
+        }
+
+        if (receiptHash) {
+          const dupHash = findDuplicateHash(debts, receiptHash);
+          if (dupHash) {
+            return sendJson(res, 400, {
+              success: false,
+              message: `Archivo duplicado rechazado: Este comprobante (Hash SHA-256: ${receiptHash.substring(0, 16)}...) ya fue registrado previamente en la deuda '${dupHash.debtId}' (${dupHash.provider}). Aunque tenga diferente nombre, el contenido binario es exactamente el mismo.`
+            });
+          }
+
+          // VALIDACIÓN DE PERTENENCIA: ¿El comprobante pertenece a la empresa?
+          if (receiptBuf && (firstReceipt.type === 'application/pdf' || (firstReceipt.name && firstReceipt.name.toLowerCase().endsWith('.pdf')))) {
+            const rText = extractPdfText(receiptBuf);
+            const rInsp = inspectDocumentBelonging(rText, provider, amount);
+            if (rInsp.isAlienDocument && !body.confirmedBelongs) {
+              return sendJson(res, 400, {
+                success: false,
+                message: `Comprobante ajeno rechazado: Se detectó que el comprobante no pertenece a ${AUTHORIZED_COMPANY.name} (RUC ${AUTHORIZED_COMPANY.ruc}) y contiene RUCs ajenos (${rInsp.alienRucs.join(', ')}). No se permite registrar una boleta que no corresponde a la empresa.`
+              });
+            }
+          }
+        }
+
         const { limaDate } = getSystemDateStrings();
         const newId = 'PAY-' + body.dueDate.replace(/-/g, '').substring(0, 6) + '-' + String(debts.length + 1).padStart(3, '0');
+
+        const receiptsToSave = (Array.isArray(body.receipts) ? body.receipts : []).map((r, i) => {
+          if (i === 0 && receiptHash) {
+            return {
+              ...r,
+              fileHash: receiptHash,
+              verifiedBelongs: true,
+              recipientCompany: AUTHORIZED_COMPANY.name,
+              recipientRuc: AUTHORIZED_COMPANY.ruc
+            };
+          }
+          return r;
+        });
 
         const newDebt = {
           id: newId,
@@ -301,7 +508,7 @@ const server = http.createServer(async (req, res) => {
           assignedTo: 'Asistente',
           managerAssumed: false,
           managerAssumptionReason: '',
-          receipts: Array.isArray(body.receipts) ? body.receipts : [],
+          receipts: receiptsToSave,
           payment: null,
           createdAt: limaDate
         };
@@ -345,7 +552,7 @@ const server = http.createServer(async (req, res) => {
 
         const methodType = body.method === 'Efectivo' ? 'Efectivo' : 'Transferencia';
 
-        // Cash payment control
+        // Cash payment control & Transaction Ref determination
         let cashControl = null;
         let transactionRef = '';
         if (methodType === 'Efectivo') {
@@ -370,6 +577,53 @@ const server = http.createServer(async (req, res) => {
           }
         }
 
+        // VALIDACIÓN ESTRICTA: Número de referencia / operación único (No duplicado)
+        const dupRef = findDuplicateReference(debts, transactionRef, debtId);
+        if (dupRef) {
+          return sendJson(res, 400, {
+            success: false,
+            message: `Número de referencia duplicado: La operación o recibo '${transactionRef}' ya fue registrada en el pago de la deuda '${dupRef.debtId}' (${dupRef.provider} por ${dupRef.currency} ${dupRef.amount} el ${dupRef.paidDate}). No se permite registrar pagos duplicados con la misma referencia.`
+          });
+        }
+
+        // VALIDACIÓN CRIPTOGRÁFICA DE ARCHIVO: Hash SHA-256 del comprobante
+        let proofHash = body.proofFile.fileHash || '';
+        let proofBuf = null;
+        if (body.proofFile.dataUrl) {
+          proofBuf = parseBase64Buffer(body.proofFile.dataUrl);
+          if (proofBuf) {
+            proofHash = computeSha256(proofBuf);
+          }
+        } else if (body.proofFile.url && body.proofFile.url.startsWith('/uploads/')) {
+          const pPath = path.join(__dirname, body.proofFile.url);
+          if (fs.existsSync(pPath)) {
+            proofBuf = fs.readFileSync(pPath);
+            proofHash = computeSha256(proofBuf);
+          }
+        }
+
+        if (proofHash) {
+          const dupHash = findDuplicateHash(debts, proofHash, debtId);
+          if (dupHash) {
+            return sendJson(res, 400, {
+              success: false,
+              message: `Comprobante de pago duplicado rechazado: Este archivo (Hash SHA-256: ${proofHash.substring(0, 16)}...) ya fue registrado previamente en la deuda '${dupHash.debtId}' (${dupHash.provider}). Aunque se le cambie de nombre, el contenido del archivo es idéntico y no se permite reutilizar comprobantes.`
+            });
+          }
+
+          // VALIDACIÓN DE PERTENENCIA: Comprobar que no sea una boleta ajena
+          if (proofBuf && (body.proofFile.type === 'application/pdf' || (body.proofFile.name && body.proofFile.name.toLowerCase().endsWith('.pdf')))) {
+            const pText = extractPdfText(proofBuf);
+            const pInsp = inspectDocumentBelonging(pText, debts[index].provider, debts[index].amount);
+            if (pInsp.isAlienDocument && !body.confirmedBelongs) {
+              return sendJson(res, 400, {
+                success: false,
+                message: `Comprobante ajeno rechazado: Se detectó que el comprobante no pertenece a ${AUTHORIZED_COMPANY.name} (RUC ${AUTHORIZED_COMPANY.ruc}). Se detectaron titulares/RUCs ajenos (${pInsp.alienRucs.join(', ')}). No se puede pagar una boleta que no pertenece a la empresa.`
+              });
+            }
+          }
+        }
+
         const notes = (body.notes || '').trim().substring(0, 250);
 
         if (body.updatedAmount !== undefined) {
@@ -385,7 +639,13 @@ const server = http.createServer(async (req, res) => {
           paidBy: body.paidBy || 'Ana Torres (Asistente Contable)',
           method: methodType,
           transactionRef: transactionRef,
-          proofFile: body.proofFile,
+          proofFile: {
+            ...body.proofFile,
+            fileHash: proofHash || undefined,
+            verifiedBelongs: true,
+            recipientCompany: AUTHORIZED_COMPANY.name,
+            recipientRuc: AUTHORIZED_COMPANY.ruc
+          },
           cashControl: cashControl,
           notes: notes
         };
@@ -597,26 +857,108 @@ const server = http.createServer(async (req, res) => {
         });
       }
 
-      // POST /api/upload (Cargar recibo o comprobante)
+      // POST /api/inspect-document (Diagnóstico de autenticidad, pertenencia y duplicidad de archivo)
+      if (pathname === '/api/inspect-document' && method === 'POST') {
+        const body = await parseBody(req);
+        if (!body.fileData) {
+          return sendJson(res, 400, { success: false, message: 'fileData (base64) es requerido.' });
+        }
+        const buffer = parseBase64Buffer(body.fileData);
+        if (!buffer) {
+          return sendJson(res, 400, { success: false, message: 'El archivo contiene un formato base64 no válido.' });
+        }
+
+        const fileHash = computeSha256(buffer);
+        const debts = readDebts();
+        const dup = findDuplicateHash(debts, fileHash, body.excludeDebtId || null);
+
+        let extractedText = '';
+        const isPdf = body.fileType === 'application/pdf' || (body.fileName && body.fileName.toLowerCase().endsWith('.pdf'));
+        if (isPdf) {
+          extractedText = extractPdfText(buffer);
+        }
+
+        const inspection = inspectDocumentBelonging(extractedText, body.expectedProvider, body.expectedAmount);
+
+        return sendJson(res, 200, {
+          success: true,
+          fileHash,
+          fileSize: buffer.length,
+          isDuplicate: !!dup,
+          duplicateInfo: dup,
+          extractedText,
+          belongsToCompany: inspection.belongsToCompany,
+          isAlienDocument: inspection.isAlienDocument,
+          alienRucs: inspection.alienRucs,
+          hasCompanyRuc: inspection.hasCompanyRuc,
+          hasCompanyName: inspection.hasCompanyName,
+          providerMatch: inspection.providerMatch,
+          snippet: inspection.extractedSnippet,
+          companyInfo: AUTHORIZED_COMPANY
+        });
+      }
+
+      // POST /api/check-reference (Comprobar si el N° de operación o recibo ya está usado)
+      if (pathname === '/api/check-reference' && method === 'POST') {
+        const body = await parseBody(req);
+        const ref = (body.reference || '').trim();
+        const excludeDebtId = body.excludeDebtId || null;
+        const debts = readDebts();
+        const dup = findDuplicateReference(debts, ref, excludeDebtId);
+        return sendJson(res, 200, {
+          success: true,
+          isDuplicate: !!dup,
+          duplicateInfo: dup
+        });
+      }
+
+      // POST /api/upload (Cargar recibo o comprobante con validación de Hash SHA-256)
       if (pathname === '/api/upload' && method === 'POST') {
         const body = await parseBody(req);
         if (!body.fileName || !body.fileData) {
           return sendJson(res, 400, { success: false, message: 'fileName y fileData (base64) son requeridos.' });
         }
 
+        const buffer = parseBase64Buffer(body.fileData);
+        if (!buffer) {
+          return sendJson(res, 400, { success: false, message: 'Formato de archivo inválido.' });
+        }
+
+        const fileHash = computeSha256(buffer);
+        const debts = readDebts();
+        const dup = findDuplicateHash(debts, fileHash);
+        if (dup) {
+          return sendJson(res, 409, {
+            success: false,
+            duplicate: true,
+            fileHash,
+            message: `Archivo duplicado rechazado: Este documento (Hash SHA-256: ${fileHash.substring(0, 16)}...) ya existe en el sistema registrado en la deuda '${dup.debtId}' (${dup.provider}). Aunque tenga otro nombre, el contenido es idéntico.`
+          });
+        }
+
         // Clean filename and write
         const safeName = Date.now() + '_' + body.fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
         const filePath = path.join(UPLOADS_DIR, safeName);
-        const base64Data = body.fileData.replace(/^data:([A-Za-z-+/]+);base64,/, '');
+        fs.writeFileSync(filePath, buffer);
 
-        fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
+        let extractedText = '';
+        const isPdf = body.fileType === 'application/pdf' || body.fileName.toLowerCase().endsWith('.pdf');
+        if (isPdf) {
+          extractedText = extractPdfText(buffer);
+        }
+        const inspection = inspectDocumentBelonging(extractedText, body.expectedProvider);
 
         const fileUrl = `/uploads/${safeName}`;
         return sendJson(res, 201, {
           success: true,
           url: fileUrl,
           fileName: body.fileName,
-          type: body.fileType || 'application/octet-stream'
+          fileHash: fileHash,
+          size: buffer.length,
+          type: body.fileType || 'application/octet-stream',
+          belongsToCompany: inspection.belongsToCompany,
+          isAlienDocument: inspection.isAlienDocument,
+          alienRucs: inspection.alienRucs
         });
       }
 

@@ -145,33 +145,40 @@ def create_document():
                 "Permitir clasificar la categoría (Servicios Básicos, Alquiler, Telecomunicaciones, Impuestos, etc.).",
                 "Permitir marcar la deuda como 'Pago Recurrente Mensual' (agua, luz, alquiler) para su pre-programación futura.",
                 "Zona de carga de archivos (Dropzone) para adjuntar el recibo o factura recibida en formato PDF o imagen.",
+                "Validación criptográfica binaria (SHA-256) obligatoria: el sistema rechaza recibos idénticos previamente cargados, impidiendo duplicidad aun si se altera el nombre del archivo.",
+                "Auditoría de Titularidad de Documento: si el recibo adjunto pertenece a otra razón social o RUC ajeno distinto a TechSolutions Perú S.A.C. (RUC 20601827361), el sistema bloquea el registro con alerta de seguridad.",
                 "Al guardar, la deuda se almacena en el sistema y se muestra inmediatamente en el listado del mes."
             ],
             "subtasks": [
                 ("Subtarea 3.1", "Construir formulario modal con campos validados para la creación de tareas de pago."),
                 ("Subtarea 3.2", "Crear endpoint POST /api/debts que genere ID correlativo y guarde la deuda en la base JSON."),
-                ("Subtarea 3.3", "Implementar procesamiento de archivos en base64/upload para los recibos adjuntos."),
-                ("Subtarea 3.4", "Restringir la visibilidad del botón de creación únicamente para el rol Asistente.")
+                ("Subtarea 3.3", "Implementar cálculo de huella digital SHA-256 en cliente y backend para evitar archivos duplicados."),
+                ("Subtarea 3.4", "Implementar motor nativo de inspección de texto PDF y validación de pertenencia empresarial (TechSolutions Perú S.A.C.)."),
+                ("Subtarea 3.5", "Restringir la visibilidad del botón de creación únicamente para el rol Asistente.")
             ]
         },
         {
             "id": "HU-04",
-            "title": "Ejecución de Pagos con Comprobante Obligatorio (PDF o Imagen)",
+            "title": "Ejecución de Pagos con Comprobante Obligatorio, Auditoría SHA-256 y Unicidad de Operación",
             "role": "Asistente Contable",
-            "narrative": "Como Asistente Contable encargada de realizar los pagos, quiero registrar la liquidación de una deuda seleccionando el método de pago y adjuntando obligatoriamente el comprobante, para que ninguna deuda se marque como pagada sin una prueba real y verificable.",
+            "narrative": "Como Asistente Contable encargada de realizar los pagos, quiero registrar la liquidación de una deuda seleccionando el método de pago, adjuntando obligatoriamente el comprobante verificado por huella digital SHA-256 y registrando un número de operación bancaria o recibo único, para que ninguna deuda se marque como pagada sin una prueba real, irrepetible y perteneciente a la empresa.",
             "priority": "Alta (Regla de Negocio Crítica)",
             "criteria": [
                 "Para marcar una tarea como 'Pagada', el sistema EXIGE OBLIGATORIAMENTE adjuntar un comprobante en formato PDF o Imagen.",
                 "El botón de confirmación de pago debe estar deshabilitado hasta que se haya seleccionado un archivo válido.",
+                "Validación de Duplicidad de Archivos por Hash SHA-256: Si el archivo ya fue utilizado como comprobante o recibo en cualquier deuda, se bloquea la operación indicando el código de la deuda original.",
+                "Validación de Unicidad de Referencia Bancaria / N° de Recibo: En transferencias (N° de operación) o efectivo (N° de recibo), el sistema verifica en tiempo real que el código no exista previamente en otra deuda pagada.",
+                "Inspección de Titularidad del Comprobante: Bloqueo inmediato si el comprobante digital detecta facturas o boletas emitidas a terceros ajenos a la empresa autorizada.",
                 "El Asistente puede seleccionar entre método 'Transferencia Bancaria' o 'Pago en Efectivo'.",
                 "Al confirmarse el pago, la tarjeta Post-it pasa a estado Verde [ PAGADO ✓ ].",
-                "Tanto el Gerente como el Asistente pueden hacer clic en 'Ver Comprobante' para auditar el documento en un visor integrado."
+                "Tanto el Gerente como el Asistente pueden hacer clic en 'Ver Comprobante' para auditar el documento en un visor integrado con trazabilidad de hash SHA-256 y validación de pertenencia."
             ],
             "subtasks": [
                 ("Subtarea 4.1", "Crear modal 'Registrar Ejecución de Pago' con resumen de la deuda a cancelar."),
-                ("Subtarea 4.2", "Implementar regla de validación estricta en frontend y backend: comprobante obligatorio."),
-                ("Subtarea 4.3", "Crear endpoint PUT /api/debts/:id/pay que verifique la presencia del comprobante antes de guardar."),
-                ("Subtarea 4.4", "Desarrollar visor de documentos modal (iframe para PDF e imagen con zoom) para auditoría.")
+                ("Subtarea 4.2", "Implementar endpoint POST /api/check-reference y validación en tiempo real de duplicidad de N° de operación bancaria."),
+                ("Subtarea 4.3", "Implementar motor de validación criptográfica SHA-256 contra la base de datos de comprobantes y recibos."),
+                ("Subtarea 4.4", "Crear endpoint PUT /api/debts/:id/pay que verifique comprobante, unicidad de hash, referencia bancaria y titularidad de empresa."),
+                ("Subtarea 4.5", "Desarrollar visor de documentos modal con tarjeta de auditoría criptográfica (SHA-256) e indicador de empresa titular.")
             ]
         },
         {

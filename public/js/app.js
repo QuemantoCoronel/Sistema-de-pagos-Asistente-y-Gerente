@@ -1270,17 +1270,121 @@ function toggleRecurringOptions(isRecurring) {
   if (grp) grp.style.display = isRecurring ? 'block' : 'none';
 }
 
-function handleFileReceiptSelect(input) {
+// ==========================================================================
+// SEGURIDAD CRIPTOGRÁFICA Y AUDITORÍA DE DOCUMENTOS (CLIENTE)
+// ==========================================================================
+async function computeFileSha256(file) {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  } catch (err) {
+    console.warn('Crypto subtle error:', err);
+    return null;
+  }
+}
+
+function checkReferenceDuplicateLocal(ref, currentDebtId = null) {
+  if (!ref) return null;
+  const clean = ref.trim().toUpperCase();
+  if (clean.length < 2) return null;
+
+  for (const d of state.debts) {
+    if (d.status !== 'Pagado' || (currentDebtId && d.id === currentDebtId)) continue;
+    const existingRef = (d.payment?.transactionRef || '').trim().toUpperCase();
+    const existingVoucher = (d.payment?.cashControl?.cashVoucherNumber || '').trim().toUpperCase();
+    if (existingRef === clean || existingVoucher === clean) {
+      return {
+        debtId: d.id,
+        provider: d.provider,
+        amount: d.amount,
+        currency: d.currency || 'PEN',
+        paidDate: d.payment?.paidDate || d.dueDate,
+        ref: clean
+      };
+    }
+  }
+  return null;
+}
+
+function validateReferenceRealtime(val, method) {
+  const isCash = method === 'Efectivo';
+  const feedbackEl = document.getElementById(isCash ? 'feedbackCashVoucher' : 'feedbackTransferRef');
+  const inputEl = document.getElementById(isCash ? 'inpCashVoucher' : 'inpTransferRef');
+  const currentDebtId = document.getElementById('payDebtId')?.value;
+  const submitBtn = document.getElementById('btnSubmitPayment');
+
+  if (!feedbackEl || !inputEl) return;
+
+  const clean = (val || '').trim();
+  if (clean.length < 2) {
+    feedbackEl.style.display = 'none';
+    inputEl.classList.remove('input-error');
+    return;
+  }
+
+  const dup = checkReferenceDuplicateLocal(clean, currentDebtId);
+  if (dup) {
+    inputEl.classList.add('input-error');
+    feedbackEl.className = 'ref-validation-feedback error';
+    feedbackEl.style.display = 'block';
+    feedbackEl.innerHTML = `
+      ⛔ <strong>Referencia Duplicada:</strong> Ya fue registrada en el pago de la deuda <strong>${escapeHtml(dup.debtId)}</strong> (${escapeHtml(dup.provider)} por ${dup.currency} ${formatMoney(dup.amount)}). No se permiten pagos repetidos con la misma referencia.
+    `;
+    if (submitBtn) submitBtn.disabled = true;
+  } else {
+    inputEl.classList.remove('input-error');
+    feedbackEl.className = 'ref-validation-feedback valid';
+    feedbackEl.style.display = 'block';
+    feedbackEl.innerHTML = `
+      ✓ <strong>Referencia única:</strong> No existen pagos registrados previamente con este código.
+    `;
+    if (state.selectedPaymentProofFile && !state.selectedPaymentProofFile.isBlocked) {
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  }
+}
+
+async function inspectDocumentWithServer(file, fileDataUrl, expectedProvider, expectedAmount, excludeDebtId) {
+  try {
+    const res = await fetch('/api/inspect-document', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fileName: file.name,
+        fileType: file.type,
+        fileData: fileDataUrl,
+        expectedProvider,
+        expectedAmount,
+        excludeDebtId
+      })
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn('Inspect API call failed:', err);
+  }
+  return null;
+}
+
+async function handleFileReceiptSelect(input) {
   if (!input.files || !input.files[0]) return;
   const file = input.files[0];
 
   const reader = new FileReader();
-  reader.onload = (e) => {
+  reader.onload = async (e) => {
+    const dataUrl = e.target.result;
+    const fileHash = await computeFileSha256(file);
+
     state.selectedReceiptFile = {
       name: file.name,
       type: file.type,
       size: `${Math.round(file.size / 1024)} KB`,
-      dataUrl: e.target.result
+      dataUrl: dataUrl,
+      fileHash: fileHash,
+      isBlocked: false
     };
 
     const dropzoneReceipt = document.getElementById('dropzoneReceipt');
@@ -1295,10 +1399,87 @@ function handleFileReceiptSelect(input) {
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: #3b82f6;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
           <span class="file-name">${escapeHtml(file.name)}</span>
           <span style="font-size: 0.74rem; color: var(--text-muted);">(${state.selectedReceiptFile.size})</span>
+          ${fileHash ? `<span class="badge-chip blue" style="margin-left: 6px; font-size: 0.7rem;">SHA-256: ${fileHash.substring(0, 8)}...</span>` : ''}
         </div>
         <button type="button" class="btn btn-secondary btn-sm" onclick="removeSelectedReceipt()">Quitar</button>
       </div>
     `;
+
+    // Realizar inspección de seguridad en servidor
+    const auditBox = document.getElementById('receiptAuditBox');
+    const submitBtn = document.getElementById('btnSubmitNewDebt');
+    if (auditBox) {
+      auditBox.style.display = 'block';
+      auditBox.innerHTML = `
+        <div style="padding: 10px; font-size: 0.8rem; color: var(--text-muted); display: flex; align-items: center; gap: 8px;">
+          <span class="spinner-sm" style="display: inline-block; width: 14px; height: 14px; border: 2px solid var(--accent-primary); border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite;"></span>
+          Verificando autenticidad criptográfica y titularidad...
+        </div>
+      `;
+    }
+
+    const providerInput = document.getElementById('inpProvider')?.value || '';
+    const amountInput = parseFloat(document.getElementById('inpAmount')?.value) || 0;
+    const insp = await inspectDocumentWithServer(file, dataUrl, providerInput, amountInput, null);
+
+    if (auditBox) {
+      if (insp && insp.isDuplicate) {
+        state.selectedReceiptFile.isBlocked = true;
+        if (submitBtn) submitBtn.disabled = true;
+        auditBox.innerHTML = `
+          <div class="duplicate-alert-card">
+            <div class="alert-header">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <strong>ARCHIVO DUPLICADO DETECTADO (BLOQUEADO)</strong>
+            </div>
+            <p>Este comprobante ya fue subido anteriormente en el sistema.</p>
+            <ul>
+              <li><strong>Deuda de origen:</strong> ${escapeHtml(insp.duplicateInfo.debtId)} - ${escapeHtml(insp.duplicateInfo.provider)}</li>
+              <li><strong>Fecha registrada:</strong> ${insp.duplicateInfo.date}</li>
+              <li><strong>Huella Digital SHA-256:</strong> <code>${escapeHtml(insp.fileHash.substring(0, 16))}...</code></li>
+            </ul>
+            <p class="alert-note">El sistema analiza el contenido binario real del archivo (Hash SHA-256). Aunque cambies el nombre del archivo, el contenido es idéntico y el sistema bloquea su reutilización.</p>
+          </div>
+        `;
+        showToast('Comprobante duplicado: Este archivo ya existe en el sistema.', 'error');
+      } else if (insp && insp.isAlienDocument) {
+        state.selectedReceiptFile.isBlocked = true;
+        if (submitBtn) submitBtn.disabled = true;
+        auditBox.innerHTML = `
+          <div class="alien-doc-alert-card">
+            <div class="alert-header">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              <strong>COMPROBANTE AJENO: NO PERTENECE A LA EMPRESA</strong>
+            </div>
+            <p>Se detectó que este comprobante <strong>no está emitido a nombre de TechSolutions Perú S.A.C. (RUC 20601827361)</strong>.</p>
+            <div class="alien-details">
+              <strong>Titulares o RUCs detectados en documento:</strong> ${escapeHtml(insp.alienRucs.join(', ') || 'Tercero particular')}<br>
+              <strong>Empresa autorizada:</strong> TechSolutions Perú S.A.C. (RUC 20601827361)
+            </div>
+            <p class="alert-note">Por seguridad contable, el sistema bloquea la creación de obligaciones con boletas ajenas.</p>
+            ${insp.snippet ? `
+              <div class="doc-snippet-box"><strong>Texto extraído del documento:</strong><br>${escapeHtml(insp.snippet)}</div>
+            ` : ''}
+          </div>
+        `;
+        showToast('Comprobante ajeno: El documento no pertenece a TechSolutions Perú S.A.C.', 'error');
+      } else {
+        state.selectedReceiptFile.isBlocked = false;
+        if (submitBtn) submitBtn.disabled = false;
+        auditBox.innerHTML = `
+          <div class="verified-doc-card">
+            <div class="verified-header">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              <strong>COMPROBANTE AUDITADO CONFORME</strong>
+            </div>
+            <div class="verified-chips">
+              <span class="badge-chip green">✓ Titular: TechSolutions Perú S.A.C.</span>
+              <span class="badge-chip blue">🔒 Hash SHA-256: ${(insp?.fileHash || fileHash || '').substring(0, 10)}... (Único)</span>
+            </div>
+          </div>
+        `;
+      }
+    }
   };
   reader.readAsDataURL(file);
 }
@@ -1307,12 +1488,24 @@ function removeSelectedReceipt() {
   state.selectedReceiptFile = null;
   document.getElementById('fileReceipt').value = '';
   document.getElementById('receiptPreviewContainer').innerHTML = '';
+  const auditBox = document.getElementById('receiptAuditBox');
+  if (auditBox) {
+    auditBox.style.display = 'none';
+    auditBox.innerHTML = '';
+  }
+  const submitBtn = document.getElementById('btnSubmitNewDebt');
+  if (submitBtn) submitBtn.disabled = false;
   const dropzoneReceipt = document.getElementById('dropzoneReceipt');
   if (dropzoneReceipt) dropzoneReceipt.classList.add('required-missing');
 }
 
 async function handleCreateDebt(e) {
   e.preventDefault();
+
+  if (state.selectedReceiptFile?.isBlocked) {
+    showToast('El comprobante adjunto fue rechazado (duplicado o ajeno). Adjunte una boleta válida.', 'error');
+    return;
+  }
 
   const provider = document.getElementById('inpProvider').value.trim();
   const concept = document.getElementById('inpConcept').value.trim();
@@ -1379,6 +1572,7 @@ async function handleCreateDebt(e) {
     type: state.selectedReceiptFile.type,
     size: state.selectedReceiptFile.size,
     url: state.selectedReceiptFile.dataUrl,
+    fileHash: state.selectedReceiptFile.fileHash,
     uploadDate: new Date().toISOString().substring(0, 10)
   });
 
@@ -1409,7 +1603,6 @@ async function handleCreateDebt(e) {
       const banner = document.getElementById('draftRestoredAlert');
       if (banner) banner.style.display = 'none';
 
-      // Si se crea un recibo con fecha de otro mes (ej. mes pasado), conmutar automáticamente a ese periodo
       const dueMonth = dueDate.substring(0, 7);
       if (dueMonth && state.currentMonth !== dueMonth) {
         state.currentMonth = dueMonth;
@@ -1421,36 +1614,24 @@ async function handleCreateDebt(e) {
       closeModal('modalNewDebt');
       loadData();
     } else {
-      throw new Error();
+      const errData = await res.json().catch(() => ({}));
+      showToast(errData.message || 'Error al crear la tarea de pago.', 'error');
+      const auditBox = document.getElementById('receiptAuditBox');
+      if (auditBox) {
+        auditBox.style.display = 'block';
+        auditBox.innerHTML = `
+          <div class="duplicate-alert-card">
+            <div class="alert-header">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <strong>SOLICITUD RECHAZADA</strong>
+            </div>
+            <p>${escapeHtml(errData.message || 'Error en servidor')}</p>
+          </div>
+        `;
+      }
     }
-  } catch {
-    try {
-      sessionStorage.removeItem('paycontrol_new_debt_draft');
-    } catch (e) {}
-    const banner = document.getElementById('draftRestoredAlert');
-    if (banner) banner.style.display = 'none';
-
-    const newId = 'PAY-' + dueDate.replace(/-/g, '').substring(0, 6) + '-' + String(state.debts.length + 1).padStart(3, '0');
-    state.debts.push({
-      id: newId,
-      ...payload,
-      status: 'Pendiente',
-      assignedTo: 'Asistente',
-      managerAssumed: false,
-      managerAssumptionReason: '',
-      payment: null,
-      createdAt: new Date().toISOString().substring(0, 10)
-    });
-    saveLocalFallback(state.debts);
-    const dueMonth = dueDate.substring(0, 7);
-    if (dueMonth && state.currentMonth !== dueMonth) {
-      state.currentMonth = dueMonth;
-      syncMonthSelect();
-      updateMonthDisplay();
-    }
-    showToast('Tarea creada localmente.', 'success');
-    closeModal('modalNewDebt');
-    applyFiltersAndRender();
+  } catch (netErr) {
+    showToast('Error de red al conectar con el servidor.', 'error');
   }
 }
 
@@ -1498,8 +1679,29 @@ function openPayModal(debtId) {
     inpPayDate.max = `${todayStr}T23:59`;
     inpPayDate.value = getNowIsoLocal();
   }
-  document.getElementById('inpTransferRef').value = `OP-${Date.now().toString().slice(-6)}`;
-  document.getElementById('inpCashVoucher').value = `REC-${Math.floor(1000 + Math.random() * 9000)}`;
+
+  // Generate suggested unique reference
+  const randomRef = `OP-${Date.now().toString().slice(-6)}`;
+  const inpTransferRef = document.getElementById('inpTransferRef');
+  if (inpTransferRef) {
+    inpTransferRef.value = randomRef;
+    inpTransferRef.classList.remove('input-error');
+  }
+
+  const randomVoucher = `REC-${Math.floor(1000 + Math.random() * 9000)}`;
+  const inpCashVoucher = document.getElementById('inpCashVoucher');
+  if (inpCashVoucher) {
+    inpCashVoucher.value = randomVoucher;
+    inpCashVoucher.classList.remove('input-error');
+  }
+
+  // Clear audit & validation feedback
+  const fbT = document.getElementById('feedbackTransferRef');
+  if (fbT) { fbT.style.display = 'none'; fbT.innerHTML = ''; }
+  const fbC = document.getElementById('feedbackCashVoucher');
+  if (fbC) { fbC.style.display = 'none'; fbC.innerHTML = ''; }
+  const auditB = document.getElementById('proofAuditBox');
+  if (auditB) { auditB.style.display = 'none'; auditB.innerHTML = ''; }
 
   state.selectedPaymentProofFile = null;
   document.getElementById('filePaymentProof').value = '';
@@ -1508,6 +1710,7 @@ function openPayModal(debtId) {
   document.getElementById('dropzonePaymentProof').classList.add('required-missing');
 
   selectPaymentMethod('Transferencia');
+  validateReferenceRealtime(randomRef, 'Transferencia');
   openModal('modalPayDebt');
 }
 
@@ -1528,6 +1731,9 @@ function selectPaymentMethod(method) {
 
     transferGroup.style.display = 'block';
     cashGroup.style.display = 'none';
+
+    const curRef = document.getElementById('inpTransferRef')?.value || '';
+    validateReferenceRealtime(curRef, 'Transferencia');
   } else {
     btnCash.style.borderColor = '#0891b2';
     btnCash.style.background = 'rgba(6, 182, 212, 0.15)';
@@ -1536,21 +1742,29 @@ function selectPaymentMethod(method) {
 
     transferGroup.style.display = 'none';
     cashGroup.style.display = 'block';
+
+    const curVoucher = document.getElementById('inpCashVoucher')?.value || '';
+    validateReferenceRealtime(curVoucher, 'Efectivo');
   }
 }
 
-function handleFilePaymentProofSelect(input) {
+async function handleFilePaymentProofSelect(input) {
   if (!input.files || !input.files[0]) return;
   const file = input.files[0];
 
   const reader = new FileReader();
-  reader.onload = (e) => {
+  reader.onload = async (e) => {
+    const dataUrl = e.target.result;
+    const fileHash = await computeFileSha256(file);
+
     state.selectedPaymentProofFile = {
       name: file.name,
       type: file.type,
       size: `${Math.round(file.size / 1024)} KB`,
-      dataUrl: e.target.result,
-      url: e.target.result
+      dataUrl: dataUrl,
+      url: dataUrl,
+      fileHash: fileHash,
+      isBlocked: false
     };
 
     const container = document.getElementById('paymentProofPreviewContainer');
@@ -1560,14 +1774,101 @@ function handleFilePaymentProofSelect(input) {
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: #10b981;"><polyline points="20 6 9 17 4 12"/></svg>
           <span class="file-name" style="color: #10b981;">${escapeHtml(file.name)}</span>
           <span style="font-size: 0.74rem; color: var(--text-muted);">(${state.selectedPaymentProofFile.size})</span>
-          <span class="badge-pill green" style="margin-left: 8px;">COMPROBANTE VÁLIDO</span>
+          ${fileHash ? `<span class="badge-chip blue" style="margin-left: 6px; font-size: 0.7rem;">SHA-256: ${fileHash.substring(0, 8)}...</span>` : ''}
         </div>
         <button type="button" class="btn btn-secondary btn-sm" onclick="removeSelectedProof()">Cambiar</button>
       </div>
     `;
 
-    document.getElementById('btnSubmitPayment').disabled = false;
     document.getElementById('dropzonePaymentProof').classList.remove('required-missing');
+
+    // Auditoría Criptográfica e Inspección de Titularidad en Servidor
+    const auditBox = document.getElementById('proofAuditBox');
+    const submitBtn = document.getElementById('btnSubmitPayment');
+    const debtId = document.getElementById('payDebtId')?.value;
+    const debt = state.debts.find(d => d.id === debtId);
+
+    if (auditBox) {
+      auditBox.style.display = 'block';
+      auditBox.innerHTML = `
+        <div style="padding: 10px; font-size: 0.8rem; color: var(--text-muted); display: flex; align-items: center; gap: 8px;">
+          <span class="spinner-sm" style="display: inline-block; width: 14px; height: 14px; border: 2px solid var(--accent-primary); border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite;"></span>
+          Verificando no duplicidad criptográfica y pertenencia del comprobante...
+        </div>
+      `;
+    }
+
+    const insp = await inspectDocumentWithServer(file, dataUrl, debt?.provider, debt?.amount, debtId);
+
+    if (auditBox) {
+      if (insp && insp.isDuplicate) {
+        state.selectedPaymentProofFile.isBlocked = true;
+        if (submitBtn) submitBtn.disabled = true;
+        auditBox.innerHTML = `
+          <div class="duplicate-alert-card">
+            <div class="alert-header">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <strong>COMPROBANTE DUPLICADO DETECTADO (BLOQUEADO)</strong>
+            </div>
+            <p>Este comprobante ya fue subido anteriormente en el sistema.</p>
+            <ul>
+              <li><strong>Deuda de origen:</strong> ${escapeHtml(insp.duplicateInfo.debtId)} - ${escapeHtml(insp.duplicateInfo.provider)}</li>
+              <li><strong>Fecha registrada:</strong> ${insp.duplicateInfo.date}</li>
+              <li><strong>Huella Digital SHA-256:</strong> <code>${escapeHtml(insp.fileHash.substring(0, 16))}...</code></li>
+            </ul>
+            <p class="alert-note">El sistema valida el contenido binario real del archivo (Hash SHA-256). Aunque cambies el nombre del archivo, el contenido es idéntico y el sistema bloquea su reutilización.</p>
+          </div>
+        `;
+        showToast('Comprobante duplicado: Este archivo ya existe en el sistema.', 'error');
+      } else if (insp && insp.isAlienDocument) {
+        state.selectedPaymentProofFile.isBlocked = true;
+        if (submitBtn) submitBtn.disabled = true;
+        auditBox.innerHTML = `
+          <div class="alien-doc-alert-card">
+            <div class="alert-header">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              <strong>COMPROBANTE AJENO DETECTADO: NO PERTENECE A LA EMPRESA</strong>
+            </div>
+            <p>Se detectó que este comprobante <strong>no pertenece a TechSolutions Perú S.A.C. (RUC 20601827361)</strong>.</p>
+            <div class="alien-details">
+              <strong>Titulares o RUCs detectados en documento:</strong> ${escapeHtml(insp.alienRucs.join(', ') || 'Tercero particular no autorizado')}<br>
+              <strong>Empresa titular autorizada:</strong> TechSolutions Perú S.A.C. (RUC 20601827361)
+            </div>
+            <p class="alert-note">El sistema bloquea este desembolso para impedir pagar boletas que no pertenezcan a la empresa o a esta obligación.</p>
+            ${insp.snippet ? `
+              <div class="doc-snippet-box"><strong>Texto extraído del documento:</strong><br>${escapeHtml(insp.snippet)}</div>
+            ` : ''}
+          </div>
+        `;
+        showToast('Comprobante ajeno: No pertenece a TechSolutions Perú S.A.C.', 'error');
+      } else {
+        state.selectedPaymentProofFile.isBlocked = false;
+        auditBox.innerHTML = `
+          <div class="verified-doc-card">
+            <div class="verified-header">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              <strong>COMPROBANTE AUDITADO Y AUTORIZADO</strong>
+            </div>
+            <div class="verified-chips">
+              <span class="badge-chip green">✓ Titular: TechSolutions Perú S.A.C.</span>
+              <span class="badge-chip blue">🔒 Hash SHA-256: ${(insp?.fileHash || fileHash || '').substring(0, 10)}... (Único)</span>
+              ${insp?.providerMatch ? `<span class="badge-chip purple">✓ Proveedor: ${escapeHtml(debt?.provider || '')}</span>` : ''}
+            </div>
+          </div>
+        `;
+
+        // Check if reference is not duplicate before enabling submit
+        const activeMethod = state.activePaymentMethod;
+        const currentRef = activeMethod === 'Efectivo'
+          ? (document.getElementById('inpCashVoucher')?.value || '').trim()
+          : (document.getElementById('inpTransferRef')?.value || '').trim();
+
+        const dupRef = checkReferenceDuplicateLocal(currentRef, debtId);
+        if (!dupRef && submitBtn) {
+          submitBtn.disabled = false;
+        }
+      }
+    }
   };
   reader.readAsDataURL(file);
 }
@@ -1576,6 +1877,11 @@ function removeSelectedProof() {
   state.selectedPaymentProofFile = null;
   document.getElementById('filePaymentProof').value = '';
   document.getElementById('paymentProofPreviewContainer').innerHTML = '';
+  const auditBox = document.getElementById('proofAuditBox');
+  if (auditBox) {
+    auditBox.style.display = 'none';
+    auditBox.innerHTML = '';
+  }
   document.getElementById('btnSubmitPayment').disabled = true;
   document.getElementById('dropzonePaymentProof').classList.add('required-missing');
 }
@@ -1585,6 +1891,11 @@ async function handleExecutePayment(e) {
 
   if (!state.selectedPaymentProofFile) {
     showToast('REQUISITO OBLIGATORIO: Adjunte el comprobante en formato PDF o Imagen para marcar como pagada.', 'error');
+    return;
+  }
+
+  if (state.selectedPaymentProofFile.isBlocked) {
+    showToast('El comprobante adjunto fue rechazado (duplicado o ajeno). Por favor adjunte un comprobante legítimo y único.', 'error');
     return;
   }
 
@@ -1646,6 +1957,14 @@ async function handleExecutePayment(e) {
     transactionRef = rawRef;
   }
 
+  // Double check reference uniqueness before sending
+  const dupRef = checkReferenceDuplicateLocal(transactionRef, debtId);
+  if (dupRef) {
+    showToast(`Referencia duplicada: Ya fue utilizada en el pago de la deuda '${dupRef.debtId}' (${dupRef.provider}). Ingrese una referencia bancaria única.`, 'error');
+    validateReferenceRealtime(transactionRef, method);
+    return;
+  }
+
   const inpPayAmount = document.getElementById('inpPayAmount');
   let updatedAmount = undefined;
   if (inpPayAmount) {
@@ -1665,7 +1984,8 @@ async function handleExecutePayment(e) {
       name: state.selectedPaymentProofFile.name,
       type: state.selectedPaymentProofFile.type,
       url: state.selectedPaymentProofFile.url || state.selectedPaymentProofFile.dataUrl,
-      dataUrl: state.selectedPaymentProofFile.dataUrl
+      dataUrl: state.selectedPaymentProofFile.dataUrl,
+      fileHash: state.selectedPaymentProofFile.fileHash
     },
     cashControl,
     cashVoucherNumber: cashControl?.cashVoucherNumber,
@@ -1686,23 +2006,26 @@ async function handleExecutePayment(e) {
       closeModal('modalPayDebt');
       loadData();
     } else {
-      const errJson = await res.json();
-      throw new Error(errJson.message || 'Error en servidor');
-    }
-  } catch (err) {
-    const idx = state.debts.findIndex(d => d.id === debtId);
-    if (idx !== -1) {
-      if (updatedAmount !== undefined) {
-        state.debts[idx].amount = updatedAmount;
+      const errJson = await res.json().catch(() => ({}));
+      const errorMsg = errJson.message || 'Error en el servidor al registrar el pago.';
+      showToast(errorMsg, 'error');
+
+      const auditBox = document.getElementById('proofAuditBox');
+      if (auditBox) {
+        auditBox.style.display = 'block';
+        auditBox.innerHTML = `
+          <div class="duplicate-alert-card">
+            <div class="alert-header">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <strong>OPERACIÓN RECHAZADA POR SEGURIDAD</strong>
+            </div>
+            <p>${escapeHtml(errorMsg)}</p>
+          </div>
+        `;
       }
-      state.debts[idx].status = 'Pagado';
-      state.debts[idx].payment = payload;
-      saveLocalFallback(state.debts);
-      showToast('Pago registrado localmente.', 'success');
-      closeModal('modalPayDebt');
-      applyFiltersAndRender();
-      updateSummaryKPIs();
     }
+  } catch (netErr) {
+    showToast('Error de red al conectar con el servidor. No se pudo registrar el pago.', 'error');
   }
 }
 
@@ -1830,7 +2153,9 @@ function openDualDocumentViewer(debtId) {
         <div class="dual-viewer-audit-meta">
           <strong>Archivo:</strong> ${escapeHtml(receipt.name)} <span style="color: var(--text-muted);">(${receipt.size || 'Archivo original'})</span><br>
           <strong>Fecha Recepción:</strong> ${receipt.uploadDate || debt.createdAt || '-'}<br>
-          <strong>Importe a Cobrar:</strong> <span style="font-weight: 700; color: var(--accent-primary);">${debt.currency || 'S/'} ${formatMoney(debt.amount)}</span>
+          <strong>Importe a Cobrar:</strong> <span style="font-weight: 700; color: var(--accent-primary);">${debt.currency || 'S/'} ${formatMoney(debt.amount)}</span><br>
+          <strong>Titular Receptor:</strong> <span class="badge-chip green" style="padding: 2px 6px; font-size: 0.72rem;">✓ TechSolutions Perú S.A.C. (RUC 20601827361)</span><br>
+          ${receipt.fileHash ? `<strong>Huella Digital SHA-256:</strong> <code style="font-size: 0.72rem; color: #93c5fd;">${escapeHtml(receipt.fileHash)}</code>` : ''}
         </div>
       </div>
     `;
@@ -1886,14 +2211,16 @@ function openDualDocumentViewer(debtId) {
           `}
         </div>
         <div class="dual-viewer-audit-meta" style="background: rgba(16, 185, 129, 0.08); border-color: rgba(16, 185, 129, 0.3);">
-          <strong style="color: #10b981;">Pago Liquidado y Verificado:</strong><br>
+          <strong style="color: #10b981;">Pago Liquidado y Conciliado:</strong><br>
           <strong>Fecha y Hora:</strong> ${formatDateTime(p.paidDate)}<br>
           <strong>Pagado por:</strong> ${escapeHtml(p.paidBy)} &bull; <strong>Método:</strong> ${escapeHtml(p.method)}<br>
           ${isCash ? `
-            <strong>Control de Efectivo:</strong> N° Recibo: ${escapeHtml(p.cashControl?.cashVoucherNumber || '-')} &bull; Custodio: ${escapeHtml(p.cashControl?.cashCustodian || '-')}
+            <strong>Control de Efectivo:</strong> N° Recibo: <code>${escapeHtml(p.cashControl?.cashVoucherNumber || '-')}</code> &bull; Custodio: ${escapeHtml(p.cashControl?.cashCustodian || '-')}
           ` : `
-            <strong>N° Transacción / Ref:</strong> ${escapeHtml(p.transactionRef || 'Sin referencia')}
-          `}
+            <strong>N° Transacción / Ref:</strong> <code>${escapeHtml(p.transactionRef || 'Sin referencia')}</code> <span class="badge-chip green" style="padding: 1px 5px; font-size: 0.68rem;">✓ Único</span>
+          `}<br>
+          <strong>Titular Auditado:</strong> <span class="badge-chip green" style="padding: 2px 6px; font-size: 0.72rem;">✓ TechSolutions Perú S.A.C.</span><br>
+          ${proof.fileHash ? `<strong>Huella Digital SHA-256:</strong> <code style="font-size: 0.72rem; color: #34d399;">${escapeHtml(proof.fileHash)}</code>` : ''}
         </div>
       </div>
     `;

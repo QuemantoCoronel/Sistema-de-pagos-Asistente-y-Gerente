@@ -63,6 +63,58 @@ fs.writeFileSync('uploads/factura_papelera.pdf', buildMinimalPdf('FACTURA UTILES
 fs.writeFileSync('uploads/comprobante_alquiler_banco.pdf', buildMinimalPdf('CONSTANCIA TRANSFERENCIA BANCARIA', 'Inmobiliaria Los Sauces S.A.C.', '5,500.00', '2026-10-12', 'BCP-TRANSF-9948271', true));
 fs.writeFileSync('uploads/vale_caja_chica_limpieza.pdf', buildMinimalPdf('VALE EGRESO EFECTIVO CAJA CHICA', 'Servicios de Limpieza Express', '380.00', '2026-10-15', 'VALE-CC-1049', true));
 
+// Boletas de demostración para pruebas de auditoría del profesor:
+// 1. Boleta válida legítima emitida para TechSolutions Perú S.A.C.
+fs.writeFileSync('uploads/boleta_valida_techsolutions.pdf', buildMinimalPdf('FACTURA ELECTRONICA F001-00982', 'Distribuidora Logistica Peru S.A.', '350.00', '2026-10-20', 'F001-00982', false));
+
+// 2. Boleta ajena que NO pertenece a la empresa (emitida a otra empresa ajena con RUC 20554433221)
+function buildAlienPdf() {
+  const lines = [
+    "%PDF-1.4",
+    "1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj",
+    "2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj",
+    "3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 600 800] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >> endobj",
+    "4 0 obj",
+    "<< /Length 400 >>",
+    "stream",
+    "BT",
+    "/F1 20 Tf",
+    "50 740 Td",
+    "(BOLETA DE VENTA ELECTRONICA B003-88129) Tj",
+    "/F1 12 Tf",
+    "0 -40 Td",
+    "(Cliente / Destinatario: Inversiones Los Andes S.A.C. - RUC 20554433221) Tj",
+    "0 -25 Td",
+    "(Beneficiario / Emisor: Ferreteria Central El Sol E.I.R.L. - RUC 20129384751) Tj",
+    "0 -25 Td",
+    "(Importe Total: S/ 780.00) Tj",
+    "0 -25 Td",
+    "(Fecha de Emision: 2026-10-19) Tj",
+    "0 -25 Td",
+    "(Nro. Operacion / Documento: B003-88129) Tj",
+    "0 -30 Td",
+    "(ADVERTENCIA: COMPROBANTE EMITIDO A OTRA EMPRESA AJENA) Tj",
+    "ET",
+    "endstream",
+    "endobj",
+    "5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj",
+    "xref",
+    "0 6",
+    "0000000000 65535 f ",
+    "0000000009 00000 n ",
+    "0000000058 00000 n ",
+    "0000000115 00000 n ",
+    "0000000245 00000 n ",
+    "0000000695 00000 n ",
+    "trailer << /Size 6 /Root 1 0 R >>",
+    "startxref",
+    "775",
+    "%%EOF"
+  ];
+  return lines.join("\n");
+}
+fs.writeFileSync('uploads/boleta_ajena_otra_empresa.pdf', buildAlienPdf());
+
 // Initial debts seed dataset
 const initialDebts = [
   {
@@ -534,5 +586,37 @@ const initialDebts = [
   }
 ];
 
+const crypto = require('crypto');
+initialDebts.forEach(d => {
+  if (d.receipts && Array.isArray(d.receipts)) {
+    d.receipts.forEach(r => {
+      if (r.url && r.url.startsWith('/uploads/')) {
+        const filePath = path.join(__dirname, '..', r.url);
+        if (fs.existsSync(filePath)) {
+          const buf = fs.readFileSync(filePath);
+          r.fileHash = crypto.createHash('sha256').update(buf).digest('hex');
+          r.verifiedBelongs = true;
+          r.recipientCompany = 'TechSolutions Perú S.A.C.';
+          r.recipientRuc = '20601827361';
+        }
+      }
+    });
+  }
+  if (d.payment && d.payment.proofFile) {
+    const pf = d.payment.proofFile;
+    if (pf.url && pf.url.startsWith('/uploads/')) {
+      const filePath = path.join(__dirname, '..', pf.url);
+      if (fs.existsSync(filePath)) {
+        const buf = fs.readFileSync(filePath);
+        pf.fileHash = crypto.createHash('sha256').update(buf).digest('hex');
+        pf.verifiedBelongs = true;
+        pf.recipientCompany = 'TechSolutions Perú S.A.C.';
+        pf.recipientRuc = '20601827361';
+      }
+    }
+  }
+});
+
 fs.writeFileSync('data/debts.json', JSON.stringify(initialDebts, null, 2), 'utf8');
 console.log('Seed data and sample PDFs generated successfully!');
+
